@@ -1,0 +1,9 @@
+﻿  compilation header save succeeded; see C:\Users\ssh26\Documents\DXGI desktop duplication sample\C++\Debug\PixelShader.h
+  compilation header save succeeded; see C:\Users\ssh26\Documents\DXGI desktop duplication sample\C++\Debug\VertexShader.h
+  DesktopDuplication.cpp
+  ThreadManager.cpp
+  OutputManager.cpp
+  DuplicationManager.cpp
+  DisplayManager.cpp
+  Generating Code...
+  DesktopDuplication.vcxproj -> C:\Users\ssh26\Documents\DXGI desktop duplication sample\C++\Debug\DesktopDuplication.exe

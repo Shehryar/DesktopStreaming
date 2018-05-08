@@ -1,0 +1,3 @@
+﻿  DesktopDuplication.cpp
+C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Tools\MSVC\14.12.25827\include\xlocale(313): warning C4530: C++ exception handler used, but unwind semantics are not enabled. Specify /EHsc
+  DesktopDuplication.vcxproj -> C:\Users\ssh26\Desktop\Dev\Desktop-streaming-windowed\x64\Debug\DesktopDuplication.exe
