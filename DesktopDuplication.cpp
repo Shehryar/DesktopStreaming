@@ -80,6 +80,7 @@ bool ProcessCmdline(_Out_ INT* Output);
 //HRESULT CreateH264Encoder();
 HRESULT FindEncoder(const GUID& subtype, BOOL bAudio, IMFTransform **ppEncoder);
 void ShowHelp();
+void printLn(const char *outputStr);
 
 //
 // Class for progressive waits
@@ -261,7 +262,11 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	//CreateH264Encoder();
 	encoderResult = FindEncoder(MFVideoFormat_H264, FALSE, &pTransform);
 	// enumerate the encoders instead and use them
-	wprintf(L"encoder result %@", encoderResult);
+	if (FAILED(encoderResult)) {
+		printLn("FAILED TO FIND ENCODER");
+	}
+	
+	printLn("THIS IS A TEST");
     THREADMANAGER ThreadMgr;
     RECT DeskBounds;
     UINT OutputCount;
@@ -411,10 +416,18 @@ HRESULT FindEncoder(const GUID& subtype, BOOL bAudio, IMFTransform **ppEncoder) 
 
 	if (SUCCEEDED(hr)) {
 		hr = CoCreateInstance(ppCLSIDs[0], NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(ppEncoder));
+		printLn("Encoder found");
 	}
+	
 
 	CoTaskMemFree(ppCLSIDs);
 	return hr;
+}
+
+void printLn(const char *outputStr) {
+	char msgbuffer[100];
+	sprintf(msgbuffer, "%s \n", outputStr);
+	OutputDebugStringA(msgbuffer);
 }
 
 // Create H264 Encoder
@@ -549,7 +562,7 @@ HRESULT EncodeFrame(_In_ ID3D11Texture2D *Frame_Data, _Outptr_ IMFSample *Sample
 
 	result = MFCreateVideoSampleFromSurface(Frame_Data, &videoSample);
 	if (FAILED(result)) {
-		printf("Failed to create IMFSample from ID311Texture2D object \n");
+		printLn("Failed to create IMFSample from ID311Texture2D object");
 		goto Exit;
 	}
 
@@ -557,7 +570,7 @@ HRESULT EncodeFrame(_In_ ID3D11Texture2D *Frame_Data, _Outptr_ IMFSample *Sample
 	// pass the sample to the H.264 Transform
 	result = pTransform->ProcessInput(0, videoSample, 0);
 	if (FAILED(result)) {
-		printf("The H264 Process Input call failed \n");
+		printLn("The H264 Process Input call failed");
 		goto Exit;
 	}
 
@@ -566,7 +579,7 @@ HRESULT EncodeFrame(_In_ ID3D11Texture2D *Frame_Data, _Outptr_ IMFSample *Sample
 
 	result = pTransform->GetOutputStatus(&mftEncFlags);
 	if (FAILED(result)) {
-		printf("H264 MFT GetOutputStatus Failed \n");
+		printLn("H264 MFT GetOutputStatus Failed");
 		goto Exit;
 	}
 
@@ -576,13 +589,13 @@ HRESULT EncodeFrame(_In_ ID3D11Texture2D *Frame_Data, _Outptr_ IMFSample *Sample
 	if (mftEncFlags == MFT_OUTPUT_STATUS_SAMPLE_READY) {
 		result = pTransform->GetOutputStreamInfo(0, &StreamInfo);
 		if (FAILED(result)) {
-			printf("Failed to get output stream info from H@^$ MFT");
+			printLn("Failed to get output stream info from H@^$ MFT");
 			goto Exit;
 		}
 
 		result = MFCreateSample(&mftEncSample);
 		if (FAILED(result)) {
-			printf("Failed to create MF sample \n");
+			printLn("Failed to create MF sample");
 			goto Exit;
 		}
 
@@ -591,13 +604,13 @@ HRESULT EncodeFrame(_In_ ID3D11Texture2D *Frame_Data, _Outptr_ IMFSample *Sample
 		// TODO check if this buffer is necessary
 		result = MFCreateMemoryBuffer(StreamInfo.cbSize, &encBuffer);
 		if (FAILED(result)) {
-			printf("Failed to create memory buffer \n");
+			printLn("Failed to create memory buffer");
 			goto Exit;
 		}
 
 		result = mftEncSample->AddBuffer(encBuffer);
 		if (FAILED(result)) {
-			printf("Failed to add sample to buffer \n");
+			printLn("Failed to add sample to buffer");
 			goto Exit;
 		}
 
@@ -815,6 +828,12 @@ DWORD WINAPI DDProc(_In_ void* Param)
         }
 
 		// We have the new frame with the mouse info - encode this data
+		
+		hr = EncodeFrame(CurrentData.Frame, videoSample);
+		// the video sample might need to be added to the IMFBytestream
+		if (FAILED(hr)) {
+			printLn("Encoding frame failed");
+		}
 // encode function
         // Process new frame
         Ret = DispMgr.ProcessFrame(&CurrentData, SharedSurf, TData->OffsetX, TData->OffsetY, &DesktopDesc);
