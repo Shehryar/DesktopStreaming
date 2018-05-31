@@ -16,7 +16,7 @@
 #include "DisplayManager.h"
 #include "DuplicationManager.h"
 #include "ThreadManager.h"
-#include <wmcodecdsp.h>        // Windows Media DSP interfaces
+#include "wmcodecdsp.h" // Windows Media DSP interfaces
 #include "Evr.h"
 
 #pragma comment(lib, "mf.lib")
@@ -24,6 +24,7 @@
 #pragma comment(lib, "mfuuid.lib")
 #pragma comment(lib, "mfplay.lib")
 #pragma comment(lib, "evr.lib")
+#pragma comment(lib, "wmcodecdspuuid.lib")
 
 //
 // Globals
@@ -77,7 +78,7 @@ HRESULT EnumOutputsExpectedErrors[] = {
 DWORD WINAPI DDProc(_In_ void* Param);
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 bool ProcessCmdline(_Out_ INT* Output);
-//HRESULT CreateH264Encoder();
+HRESULT CreateH264Encoder();
 HRESULT FindEncoder(const GUID& subtype, BOOL bAudio, IMFTransform **ppEncoder);
 void ShowHelp();
 void printLn(const char *outputStr);
@@ -259,7 +260,10 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     ShowWindow(WindowHandle, nCmdShow);
     UpdateWindow(WindowHandle);
 
-	//CreateH264Encoder();
+	//encoderResult = CreateH264Encoder();
+	if (FAILED(encoderResult)) {
+		printLn("FAILED TO CREATE ENCODER");
+	}
 	encoderResult = FindEncoder(MFVideoFormat_H264, FALSE, &pTransform);
 	// enumerate the encoders instead and use them
 	if (FAILED(encoderResult)) {
@@ -387,7 +391,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     return 0;
 }
 
-HRESULT FindEncoder(const GUID& subtype, BOOL bAudio, IMFTransform **ppEncoder) {
+HRESULT FindEncoder(const GUID& subtype, BOOL bAudio, _Out_ IMFTransform **ppEncoder) {
 	HRESULT hr = S_OK;
 	UINT32 count = 0;
 
@@ -410,6 +414,7 @@ HRESULT FindEncoder(const GUID& subtype, BOOL bAudio, IMFTransform **ppEncoder) 
 
 	if (SUCCEEDED(hr) && count == 0) {
 		hr = MF_E_TOPO_CODEC_NOT_FOUND;
+		printLn("CODEC NOT FOUND");
 	}
 
 	// create the first encoder in the list
@@ -418,6 +423,103 @@ HRESULT FindEncoder(const GUID& subtype, BOOL bAudio, IMFTransform **ppEncoder) 
 		hr = CoCreateInstance(ppCLSIDs[0], NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(ppEncoder));
 		printLn("Encoder found");
 	}
+
+	// configure output type first?
+	MFCreateMediaType(&pMFTOutputMediaType);
+	pMFTOutputMediaType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+	pMFTOutputMediaType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
+	pMFTOutputMediaType->SetUINT32(MF_MT_AVG_BITRATE, 240000);
+
+	hr = MFSetAttributeSize(pMFTOutputMediaType, MF_MT_FRAME_SIZE, 640, 480);
+	if (FAILED(hr)) {
+		printLn("Failed to set frame size");
+		// TODO exit from here
+	}
+
+	hr = MFSetAttributeRatio(pMFTOutputMediaType, MF_MT_FRAME_RATE, 30, 1);
+	if (FAILED(hr)) {
+		printLn("Failed to set frame rate");
+		// TODO exit from here
+	}
+
+	hr = MFSetAttributeRatio(pMFTOutputMediaType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+
+	if (FAILED(hr)) {
+		printLn("Failed to set aspect ratio");
+		// TODO exit from here
+	}
+
+	pMFTOutputMediaType->SetUINT32(MF_MT_INTERLACE_MODE, 2);
+	pMFTOutputMediaType->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
+
+	// Set output type
+	//Flags can be passed in here as the 3rd arg
+	hr = ppEncoder->SetOutputType(0, pMFTOutputMediaType, 0);
+	if (FAILED(hr)) {
+		printLn("Failed to set output type on H.264 MFT");
+		// TODO exit from here
+	}
+
+
+	// configure input type
+	MFCreateMediaType(&pMFTInputMediaType);
+	pMFTInputMediaType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+	pMFTInputMediaType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32); // This may need to be tweaked
+
+	hr = MFSetAttributeSize(pMFTInputMediaType, MF_MT_FRAME_SIZE, 640, 480); // This is the frame size
+	if (FAILED(hr)) {
+		printLn("Failed to set frame size on H.264 MFT");
+		// TODO exit from here
+	}
+
+	hr = MFSetAttributeRatio(pMFTInputMediaType, MF_MT_FRAME_RATE, 60, 1); // Frame rate - up sample this (was 30)
+	if (FAILED(hr)) {
+		printLn("Failed to set frame rate on H.264 MFT");
+		// TODO exit from here
+	}
+
+	hr = MFSetAttributeRatio(pMFTInputMediaType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+	if (FAILED(hr)) {
+		printLn("Failed to set aspect ratio on H.264 MFT");
+		// TODO exit from here
+	}
+
+	//pMFTInputMediaType->SetUINT32(MF_MT_INTERLACE_MODE, 2);
+	hr = pTransform->SetInputType(0, pMFTInputMediaType, 0);
+	if (FAILED(hr)) {
+		printLn("Failed to set input media type on H.264 MFT");
+		// TODO exit from here
+	}
+
+	hr = pTransform->GetInputStatus(0, &mftStatus);
+	if (FAILED(hr)) {
+		printLn("Failed to get input status from H.264 MFT");
+		// TODO exit from here
+	}
+
+	if (MFT_INPUT_STATUS_ACCEPT_DATA != mftStatus) {
+		printLn("E: ApplyTransform() pTransform->GetInputStatus() not accept data \n");
+		// TODO exit from here
+	}
+
+	hr = pTransform->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, NULL);
+	if (FAILED(hr)) {
+		printLn("Failed to process FLUSH command H.264 MFT");
+		// TODO exit from here
+	}
+
+	hr = pTransform->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, NULL);
+	if (FAILED(hr)) {
+		printLn("Failed to process BEGIN_STREAMING command H.264 MFT");
+		// TODO exit from here
+	}
+
+	hr = pTransform->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, NULL);
+	if (FAILED(hr)) {
+		printLn("Failed to process START_OF_STREAM command H.264 MFT");
+		// TODO exit from here
+	}
+	// configure output type
 	
 
 	CoTaskMemFree(ppCLSIDs);
@@ -430,123 +532,118 @@ void printLn(const char *outputStr) {
 	OutputDebugStringA(msgbuffer);
 }
 
-// Create H264 Encoder
-//HRESULT CreateH264Encoder() {
-//	HRESULT result = S_OK;
-//	
-//	result = CoCreateInstance(CLSID_CMSH264EncoderMFT, NULL, CLSCTX_INPROC_SERVER, IID_IUnknown, (void**)&spTransformUnk);
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to create H264 Encoder");
-//		goto Exit; // TODO exit from here
-//	}
-//	result = spTransformUnk->QueryInterface(IID_PPV_ARGS(&pTransform));
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to get IMFTransform interface from H264 encoder MFT object");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//	// H264 encoder only supports 1 input and 1 output stream
-//
-//	// Set the output types
-//	MFCreateMediaType(&pMFTOutputMediaType);
-//	pMFTOutputMediaType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-//	pMFTOutputMediaType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
-//	pMFTOutputMediaType->SetUINT32(MF_MT_AVG_BITRATE, 240000);
-//
-//	result = MFSetAttributeSize(pMFTOutputMediaType, MF_MT_FRAME_SIZE, 640, 480);
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to set frame size");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//	result = MFSetAttributeRatio(pMFTOutputMediaType, MF_MT_FRAME_RATE, 30, 1);
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to set frame rate");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//	result = MFSetAttributeRatio(pMFTOutputMediaType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
-//
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to set aspect ratio");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//	pMFTOutputMediaType->SetUINT32(MF_MT_INTERLACE_MODE, 2);
-//	pMFTOutputMediaType->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
-//
-//	// Flags can be passed in here as the 3rd arg
-//	result = pTransform->SetOutputType(0, pMFTOutputMediaType, 0);
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to set output type on H.264 MFT");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//	// Set the input type
-//	MFCreateMediaType(&pMFTInputMediaType);
-//	pMFTInputMediaType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-//	pMFTInputMediaType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32); // This may need to be tweaked
-//
-//	result = MFSetAttributeSize(pMFTInputMediaType, MF_MT_FRAME_SIZE, 640, 480); // This is the frame size
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to set frame size on H.264 MFT");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//	result = MFSetAttributeRatio(pMFTInputMediaType, MF_MT_FRAME_RATE, 60, 1); // Frame rate - up sample this (was 30)
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to set frame rate on H.264 MFT");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//	result = MFSetAttributeRatio(pMFTInputMediaType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to set aspect ratio on H.264 MFT");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//	pMFTInputMediaType->SetUINT32(MF_MT_INTERLACE_MODE, 2);
-//
-//	result = pTransform->SetInputType(0, pMFTInputMediaType, 0);
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to set input media type on H.264 MFT");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//	result = pTransform->GetInputStatus(0, &mftStatus);
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to get input status from H.264 MFT");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//	if (MFT_INPUT_STATUS_ACCEPT_DATA != mftStatus) {
-//		printf("E: ApplyTransform() pTransform->GetInputStatus() not accept data \n");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//	result = pTransform->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, NULL);
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to process FLUSH command H.264 MFT");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//	result = pTransform->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, NULL);
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to process BEGIN_STREAMING command H.264 MFT");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//	result = pTransform->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, NULL);
-//	if (FAILED(result)) {
-//		wprintf(L"Failed to process START_OF_STREAM command H.264 MFT");
-//		goto Exit; // TODO exit from here
-//	}
-//
-//Exit:
-//	printf("Failed to set up transform");
-//
-//	return result;
-//}
+HRESULT CreateH264Encoder() {
+	// todo safe release everything
+	HRESULT result = S_OK;
+	//IUnknown *spTransformUnk = NULL;
+	// this CLSID might be the software encoder and not the hardware encoder
+	result = CoCreateInstance(CLSID_CMSH264EncoderMFT, NULL, CLSCTX_INPROC_SERVER, IID_IUnknown, (void **)spTransformUnk);
+	if (FAILED(result)) {
+		printLn("Can't create encoder");
+	}
+
+	result = spTransformUnk->QueryInterface(IID_PPV_ARGS(&pTransform));
+	if (FAILED(result)) {
+		printLn("FAILED to get interface for IMFTransform");
+	}
+
+	MFCreateMediaType(&pMFTOutputMediaType);
+	pMFTOutputMediaType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+	pMFTOutputMediaType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
+	pMFTOutputMediaType->SetUINT32(MF_MT_AVG_BITRATE, 240000);
+
+	result = MFSetAttributeSize(pMFTOutputMediaType, MF_MT_FRAME_SIZE, 640, 480);
+	if (FAILED(result)) {
+		printLn("Failed to set frame size");
+		// TODO exit from here
+	}
+	
+	result = MFSetAttributeRatio(pMFTOutputMediaType, MF_MT_FRAME_RATE, 30, 1);
+	if (FAILED(result)) {
+		printLn("Failed to set frame rate");
+		// TODO exit from here
+	}
+	
+	result = MFSetAttributeRatio(pMFTOutputMediaType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+	
+	if (FAILED(result)) {
+		printLn("Failed to set aspect ratio");
+		// TODO exit from here
+	}
+	
+	pMFTOutputMediaType->SetUINT32(MF_MT_INTERLACE_MODE, 2);
+	pMFTOutputMediaType->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
+
+	// Set output type
+	//Flags can be passed in here as the 3rd arg
+	result = pTransform->SetOutputType(0, pMFTOutputMediaType, 0);
+	if (FAILED(result)) {
+		printLn("Failed to set output type on H.264 MFT");
+		// TODO exit from here
+	}
+
+	// Set the input type
+	MFCreateMediaType(&pMFTInputMediaType);
+	pMFTInputMediaType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+	pMFTInputMediaType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32); // This may need to be tweaked
+	
+	result = MFSetAttributeSize(pMFTInputMediaType, MF_MT_FRAME_SIZE, 640, 480); // This is the frame size
+	if (FAILED(result)) {
+		printLn("Failed to set frame size on H.264 MFT");
+		// TODO exit from here
+	}
+	
+	result = MFSetAttributeRatio(pMFTInputMediaType, MF_MT_FRAME_RATE, 60, 1); // Frame rate - up sample this (was 30)
+	if (FAILED(result)) {
+		printLn("Failed to set frame rate on H.264 MFT");
+		// TODO exit from here
+	}
+	
+	result = MFSetAttributeRatio(pMFTInputMediaType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+	if (FAILED(result)) {
+		printLn("Failed to set aspect ratio on H.264 MFT");
+		// TODO exit from here
+	}
+	
+	pMFTInputMediaType->SetUINT32(MF_MT_INTERLACE_MODE, 2);
+	
+	result = pTransform->SetInputType(0, pMFTInputMediaType, 0);
+	if (FAILED(result)) {
+		printLn("Failed to set input media type on H.264 MFT");
+		// TODO exit from here
+	}
+	
+	result = pTransform->GetInputStatus(0, &mftStatus);
+	if (FAILED(result)) {
+		printLn("Failed to get input status from H.264 MFT");
+		// TODO exit from here
+	}
+
+	if (MFT_INPUT_STATUS_ACCEPT_DATA != mftStatus) {
+		printLn("E: ApplyTransform() pTransform->GetInputStatus() not accept data \n");
+		// TODO exit from here
+	}
+	
+	result = pTransform->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, NULL);
+	if (FAILED(result)) {
+		wprintf(L"Failed to process FLUSH command H.264 MFT");
+		// TODO exit from here
+	}
+	
+	result = pTransform->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, NULL);
+	if (FAILED(result)) {
+		wprintf(L"Failed to process BEGIN_STREAMING command H.264 MFT");
+		// TODO exit from here
+	}
+	
+	result = pTransform->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, NULL);
+	if (FAILED(result)) {
+		wprintf(L"Failed to process START_OF_STREAM command H.264 MFT");
+		// TODO exit from here
+	}
+
+	return result;
+}
 
 HRESULT EncodeFrame(_In_ ID3D11Texture2D *Frame_Data, _Outptr_ IMFSample *Sample) {
 	DWORD processOutputStatus = 0;
@@ -557,6 +654,7 @@ HRESULT EncodeFrame(_In_ ID3D11Texture2D *Frame_Data, _Outptr_ IMFSample *Sample
 	DWORD mftEncFlags;
 	IMFSample *mftEncSample = NULL;
 	HRESULT result = S_OK;
+	IMFTransform *h264Transform = pTransform;
 
 	memset(&encDataBuffer, 0, sizeof encDataBuffer);
 
@@ -566,8 +664,18 @@ HRESULT EncodeFrame(_In_ ID3D11Texture2D *Frame_Data, _Outptr_ IMFSample *Sample
 		goto Exit;
 	}
 
+	
+
+	//result = pTransform->SetInputType(0, pMFTInputMediaType, 0);
+	if (FAILED(result)) {
+		printLn("Failed to set input media type on H.264 MFT");
+		goto Exit; // TODO exit from here
+	}
+
 	// IMFSample created
-	// pass the sample to the H.264 Transform
+	// pass the sample to the H.264 
+	// probably need to create the h264 encoder before attempting to use it
+	// error from result is no valid type had been set
 	result = pTransform->ProcessInput(0, videoSample, 0);
 	if (FAILED(result)) {
 		printLn("The H264 Process Input call failed");
