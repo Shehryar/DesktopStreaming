@@ -12,6 +12,8 @@
 #include <limits.h>
 #include <Mferror.h>
 #include <mftransform.h>
+#include <mfidl.h>
+#include <Mfreadwrite.h>
 #include "OutputManager.h"
 #include "DisplayManager.h"
 #include "DuplicationManager.h"
@@ -19,12 +21,23 @@
 #include "wmcodecdsp.h" // Windows Media DSP interfaces
 #include "Evr.h"
 
+
 #pragma comment(lib, "mf.lib")
-#pragma comment(lib, "mfplat.lib")
-#pragma comment(lib, "mfuuid.lib")
+#pragma comment(lib, "mfreadwrite")
+#pragma comment(lib, "mfplat")
+#pragma comment(lib, "mfuuid")
 #pragma comment(lib, "mfplay.lib")
 #pragma comment(lib, "evr.lib")
 #pragma comment(lib, "wmcodecdspuuid.lib")
+
+template <class T> void SafeRelease(T **ppT)
+{
+	if (*ppT)
+	{
+		(*ppT)->Release();
+		*ppT = NULL;
+	}
+}
 
 //
 // Globals
@@ -35,6 +48,21 @@ IMFTransform *pTransform = NULL;
 IMFMediaType *pMFTInputMediaType = NULL, *pMFTOutputMediaType = NULL;
 DWORD mftStatus = 0;
 IMFSample *videoSample = NULL;
+IMFSinkWriter *sinkWriter = NULL;
+DWORD streamIdx;
+// Format constants
+const UINT32 VIDEO_WIDTH = 640;
+const UINT32 VIDEO_HEIGHT = 480;
+const UINT32 VIDEO_FPS = 30;
+const UINT64 VIDEO_FRAME_DURATION = 10 * 1000 * 1000 / VIDEO_FPS;
+const UINT32 VIDEO_BIT_RATE = 800000;
+const GUID   VIDEO_ENCODING_FORMAT = MFVideoFormat_WMV3; // Change this
+const GUID   VIDEO_INPUT_FORMAT = MFVideoFormat_RGB32; // Change this as well
+const UINT32 VIDEO_PELS = VIDEO_WIDTH * VIDEO_HEIGHT;
+const UINT32 VIDEO_FRAME_COUNT = 20 * VIDEO_FPS;
+
+
+
 
 // Below are lists of errors expect from Dxgi API calls when a transition event like mode change, PnpStop, PnpStart
 // desktop switch, TDR or session disconnect/reconnect. In all these cases we want the application to clean up the threads that process
@@ -79,6 +107,7 @@ DWORD WINAPI DDProc(_In_ void* Param);
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 bool ProcessCmdline(_Out_ INT* Output);
 //HRESULT CreateH264Encoder();
+HRESULT InitializeSinkWriter(IMFSinkWriter **ppWriter, DWORD *pStreamIndex);
 HRESULT SetupEncoder(_Outptr_ IMFTransform *transform);
 HRESULT FindEncoder(const GUID& subtype, BOOL bAudio, IMFTransform **ppEncoder);
 void ShowHelp();
@@ -266,10 +295,21 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 		printLn("FAILED TO CREATE ENCODER");
 	}
 	encoderResult = FindEncoder(MFVideoFormat_H264, FALSE, &pTransform);
-	encoderResult = SetupEncoder(&pTransform);
-	// enumerate the encoders instead and use them
 	if (FAILED(encoderResult)) {
 		printLn("FAILED TO FIND ENCODER");
+	}
+
+	encoderResult = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+	if (SUCCEEDED(encoderResult))
+	{
+		encoderResult = MFStartup(MF_VERSION);
+	}
+	else if (FAILED(encoderResult)) {
+		printLn("STARTUP FAILED");
+	}
+	encoderResult = InitializeSinkWriter(&sinkWriter, &streamIdx);
+	if (FAILED(encoderResult)) {
+		printLn("FAILED TO INITIALIZE SINK WRITER");
 	}
 	
 	printLn("THIS IS A TEST");
@@ -531,13 +571,190 @@ HRESULT SetupEncoder(_Outptr_ IMFTransform *transform) {
 	return hr;
 }
 
+
+HRESULT InitializeSinkWriter(IMFSinkWriter **ppWriter, DWORD *pStreamIndex)
+{
+	*ppWriter = NULL;
+	*pStreamIndex = NULL;
+
+	IMFSinkWriter   *pSinkWriter = NULL;
+	IMFMediaType    *pMediaTypeOut = NULL;
+	IMFMediaType    *pMediaTypeIn = NULL;
+	DWORD           streamIndex;
+
+	HRESULT hr = MFCreateSinkWriterFromURL(L"output.wmv", NULL, NULL, &pSinkWriter); // this needs to change as well
+
+	// Set the output media type.
+	if (SUCCEEDED(hr))
+	{
+		hr = MFCreateMediaType(&pMediaTypeOut);
+	} else if (FAILED(hr)) {
+		printLn(":::::::::Failed to create output media type on sink writer");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pMediaTypeOut->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to set major GUID on output media type on sink writer");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pMediaTypeOut->SetGUID(MF_MT_SUBTYPE, VIDEO_ENCODING_FORMAT); // Change the constant to h264
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to set subtype on output media type on sink writer");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pMediaTypeOut->SetUINT32(MF_MT_AVG_BITRATE, VIDEO_BIT_RATE);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to set bitrate on output");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pMediaTypeOut->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to set interlace mode on output");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = MFSetAttributeSize(pMediaTypeOut, MF_MT_FRAME_SIZE, VIDEO_WIDTH, VIDEO_HEIGHT);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to set attribute size on output");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = MFSetAttributeRatio(pMediaTypeOut, MF_MT_FRAME_RATE, VIDEO_FPS, 1);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to set frame rate on output");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = MFSetAttributeRatio(pMediaTypeOut, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to aspect ratio on output");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pSinkWriter->AddStream(pMediaTypeOut, &streamIndex);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to add Stream on output");
+		goto Exit;
+	}
+
+	// Set the input media type.
+	if (SUCCEEDED(hr))
+	{
+		hr = MFCreateMediaType(&pMediaTypeIn);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to create input type");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pMediaTypeIn->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to set major input type");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pMediaTypeIn->SetGUID(MF_MT_SUBTYPE, VIDEO_INPUT_FORMAT);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to set subtype input type");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pMediaTypeIn->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to set interlace mode on input");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = MFSetAttributeSize(pMediaTypeIn, MF_MT_FRAME_SIZE, VIDEO_WIDTH, VIDEO_HEIGHT);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to set frame size on input");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = MFSetAttributeRatio(pMediaTypeIn, MF_MT_FRAME_RATE, VIDEO_FPS, 1);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to set frame rate on input");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = MFSetAttributeRatio(pMediaTypeIn, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to set aspect ratio on input");
+		goto Exit;
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = pSinkWriter->SetInputMediaType(streamIndex, pMediaTypeIn, NULL);
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to set input type on stream");
+		goto Exit;
+	}
+
+	// Tell the sink writer to start accepting data.
+	if (SUCCEEDED(hr))
+	{
+		hr = pSinkWriter->BeginWriting();
+	}
+	else if (FAILED(hr)) {
+		printLn(":::::::::Failed to start accepting data on sink writer");
+		goto Exit;
+	}
+
+	// Return the pointer to the caller.
+	if (SUCCEEDED(hr))
+	{
+		*ppWriter = pSinkWriter;
+		(*ppWriter)->AddRef();
+		*pStreamIndex = streamIndex;
+	}
+Exit:
+	SafeRelease(&pSinkWriter);
+	SafeRelease(&pMediaTypeOut);
+	SafeRelease(&pMediaTypeIn);
+	return hr;
+}
+
 void printLn(const char *outputStr) {
 	char msgbuffer[100];
 	sprintf(msgbuffer, "%s \n", outputStr);
 	OutputDebugStringA(msgbuffer);
 }
 
-HRESULT EncodeFrame(_In_ ID3D11Texture2D *Frame_Data, _Outptr_ IMFSample *Sample) {
+HRESULT EncodeFrame(_In_ ID3D11Texture2D *Frame_Data, LONGLONG time, _Outptr_ IMFSample *Sample, _In_ IMFSinkWriter *pWriter, DWORD index) {
 	DWORD processOutputStatus = 0;
 	IMFMediaBuffer *encBuffer = NULL;
 	MFT_OUTPUT_DATA_BUFFER encDataBuffer;
@@ -546,91 +763,42 @@ HRESULT EncodeFrame(_In_ ID3D11Texture2D *Frame_Data, _Outptr_ IMFSample *Sample
 	DWORD mftEncFlags;
 	IMFSample *mftEncSample = NULL;
 	HRESULT result = S_OK;
-	IMFTransform *h264Transform = pTransform;
 
-	memset(&encDataBuffer, 0, sizeof encDataBuffer);
+	//memset(&encDataBuffer, 0, sizeof encDataBuffer);
 
 	result = MFCreateVideoSampleFromSurface(Frame_Data, &videoSample);
 	if (FAILED(result)) {
 		printLn("Failed to create IMFSample from ID311Texture2D object");
-		goto Exit;
 	}
 
-	
+	const LONG cbWidth = 4 * VIDEO_WIDTH;
+	const DWORD cbBuffer = cbWidth * VIDEO_HEIGHT;
 
-	//result = pTransform->SetInputType(0, pMFTInputMediaType, 0);
+	BYTE *pData = NULL;
+
+	// Create a new memory buffer.
+	HRESULT hr = MFCreateMemoryBuffer(cbBuffer, &encBuffer);
+
+	result = videoSample->AddBuffer(encBuffer); // might not be necessary since we have a sample already
 	if (FAILED(result)) {
-		printLn("Failed to set input media type on H.264 MFT");
-		goto Exit; // TODO exit from here
+		printLn("Failed to add buffer to sample");
 	}
 
-	// IMFSample created
-	// pass the sample to the H.264 
-	// probably need to create the h264 encoder before attempting to use it
-	// error from result is no valid type had been set
-	result = pTransform->ProcessInput(0, videoSample, 0);
+	result = videoSample->SetSampleTime(time); // timestamp
+
 	if (FAILED(result)) {
-		printLn("The H264 Process Input call failed");
-		goto Exit;
+		printLn("Failed to set sample time");
 	}
-
-	// Query the transform for the output status
-	// https://msdn.microsoft.com/en-us/library/windows/desktop/aa965264
-
-	result = pTransform->GetOutputStatus(&mftEncFlags);
+	result = videoSample->SetSampleDuration(VIDEO_FRAME_DURATION);
 	if (FAILED(result)) {
-		printLn("H264 MFT GetOutputStatus Failed");
-		goto Exit;
+		printLn("Failed to set sample duration");
 	}
 
-
-
-	// Sample is ready
-	if (mftEncFlags == MFT_OUTPUT_STATUS_SAMPLE_READY) {
-		result = pTransform->GetOutputStreamInfo(0, &StreamInfo);
-		if (FAILED(result)) {
-			printLn("Failed to get output stream info from H@^$ MFT");
-			goto Exit;
-		}
-
-		result = MFCreateSample(&mftEncSample);
-		if (FAILED(result)) {
-			printLn("Failed to create MF sample");
-			goto Exit;
-		}
-
-		// The buffer created with the call below is reference counted and auto released
-		// see (https://msdn.microsoft.com/en-us/library/windows/desktop/bb530123(v=vs.85).aspx).
-		// TODO check if this buffer is necessary
-		result = MFCreateMemoryBuffer(StreamInfo.cbSize, &encBuffer);
-		if (FAILED(result)) {
-			printLn("Failed to create memory buffer");
-			goto Exit;
-		}
-
-		result = mftEncSample->AddBuffer(encBuffer);
-		if (FAILED(result)) {
-			printLn("Failed to add sample to buffer");
-			goto Exit;
-		}
-
-		encDataBuffer.dwStreamID = 0;
-		encDataBuffer.dwStatus = 0;
-		encDataBuffer.pEvents = NULL;
-		encDataBuffer.pSample = mftEncSample;
-
-		// This processes the frame
-		mftEncProcessOutput = pTransform->ProcessOutput(0, 1, &encDataBuffer, &processOutputStatus);
-
-		// EncDataBuffer has encoded the frame
-
-		// TODO
-		// Send encDataBuffer to an rtp endpoint or udp endpoint
+	if (SUCCEEDED(result)) {
+		result = sinkWriter->WriteSample(index, videoSample);
 	}
 
 	return result;
-Exit:
-	return 0;
 }
 
 //
@@ -711,6 +879,7 @@ DWORD WINAPI DDProc(_In_ void* Param)
     // Classes
     DISPLAYMANAGER DispMgr;
     DUPLICATIONMANAGER DuplMgr;
+	LONGLONG timeStamp = 0;
 
     // D3D objects
     ID3D11Texture2D* SharedSurf = nullptr;
@@ -829,7 +998,9 @@ DWORD WINAPI DDProc(_In_ void* Param)
 
 		// We have the new frame with the mouse info - encode this data
 		
-		hr = EncodeFrame(CurrentData.Frame, videoSample);
+		hr = EncodeFrame(CurrentData.Frame, timeStamp, videoSample, sinkWriter, streamIdx);
+		timeStamp += VIDEO_FRAME_DURATION;
+		streamIdx++;
 		// the video sample might need to be added to the IMFBytestream
 		if (FAILED(hr)) {
 			printLn("Encoding frame failed");
