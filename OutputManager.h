@@ -27,6 +27,7 @@ class OUTPUTMANAGER
         void CleanRefs();
         HANDLE GetSharedHandle();
         void WindowResize();
+		ID3D11Device* m_Device;
 
     private:
     // Methods
@@ -42,7 +43,7 @@ class OUTPUTMANAGER
 
     // Vars
         IDXGISwapChain1* m_SwapChain;
-        ID3D11Device* m_Device;
+		//ID3D11Device* m_Device;
         IDXGIFactory2* m_Factory;
         ID3D11DeviceContext* m_DeviceContext;
         ID3D11RenderTargetView* m_RTV;
