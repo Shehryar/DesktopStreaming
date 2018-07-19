@@ -62,7 +62,8 @@ DUPL_RETURN OUTPUTMANAGER::InitOutput(HWND Window, INT SingleOutput, _Out_ UINT*
         D3D_DRIVER_TYPE_WARP,
         D3D_DRIVER_TYPE_REFERENCE,
     };
-    UINT NumDriverTypes = ARRAYSIZE(DriverTypes);
+
+	const UINT num_driver_types = ARRAYSIZE(DriverTypes);
 
     // Feature levels supported
     D3D_FEATURE_LEVEL FeatureLevels[] =
@@ -72,13 +73,13 @@ DUPL_RETURN OUTPUTMANAGER::InitOutput(HWND Window, INT SingleOutput, _Out_ UINT*
         D3D_FEATURE_LEVEL_10_0,
         D3D_FEATURE_LEVEL_9_1
     };
-    UINT NumFeatureLevels = ARRAYSIZE(FeatureLevels);
+	const UINT num_feature_levels = ARRAYSIZE(FeatureLevels);
     D3D_FEATURE_LEVEL FeatureLevel;
 
     // Create device
-    for (UINT DriverTypeIndex = 0; DriverTypeIndex < NumDriverTypes; ++DriverTypeIndex)
+    for (UINT DriverTypeIndex = 0; DriverTypeIndex < num_driver_types; ++DriverTypeIndex)
     {
-        hr = D3D11CreateDevice(nullptr, DriverTypes[DriverTypeIndex], nullptr, 0, FeatureLevels, NumFeatureLevels,
+        hr = D3D11CreateDevice(nullptr, DriverTypes[DriverTypeIndex], nullptr, 0, FeatureLevels, num_feature_levels,
         D3D11_SDK_VERSION, &m_Device, &FeatureLevel, &m_DeviceContext);
         if (SUCCEEDED(hr))
         {
@@ -510,6 +511,7 @@ DUPL_RETURN OUTPUTMANAGER::DrawFrame()
         ShaderResource = nullptr;
         return ProcessFailure(m_Device, L"Failed to create vertex buffer when drawing a frame", L"Error", hr, SystemTransitionsExpectedErrors);
     }
+
     m_DeviceContext->IASetVertexBuffers(0, 1, &VertexBuffer, &Stride, &Offset);
 
     // Draw textured quad onto render target
@@ -528,7 +530,15 @@ DUPL_RETURN OUTPUTMANAGER::DrawFrame()
 //
 // Process both masked and monochrome pointers
 //
-DUPL_RETURN OUTPUTMANAGER::ProcessMonoMask(bool IsMono, _Inout_ PTR_INFO* PtrInfo, _Out_ INT* PtrWidth, _Out_ INT* PtrHeight, _Out_ INT* PtrLeft, _Out_ INT* PtrTop, _Outptr_result_bytebuffer_(*PtrHeight * *PtrWidth * BPP) BYTE** InitBuffer, _Out_ D3D11_BOX* Box)
+DUPL_RETURN OUTPUTMANAGER::ProcessMonoMask(
+	bool IsMono, 
+	_Inout_ PTR_INFO* PtrInfo,
+	_Out_ INT* PtrWidth,
+	_Out_ INT* PtrHeight,
+	_Out_ INT* PtrLeft,
+	_Out_ INT* PtrTop, 
+	_Outptr_result_bytebuffer_(*PtrHeight * *PtrWidth * BPP) BYTE** InitBuffer,
+	_Out_ D3D11_BOX* Box)
 {
     // Desktop dimensions
     D3D11_TEXTURE2D_DESC FullDesc;

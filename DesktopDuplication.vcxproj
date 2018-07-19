@@ -67,6 +67,8 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>C:\Projects\_Projects\_CppLibs\FFMPEG\ffmpeg-3.4;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <LibraryPath>C:\Projects\_Projects\_CppLibs\FFMPEG\ffmpeg-3.4-libs\;$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(NETFXKitsDir)Lib\um\x86</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
@@ -90,7 +92,7 @@
       <TargetMachine>MachineX86</TargetMachine>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;Strmiids.lib;libavutil.a;libswscale.a;libavfilter.a;mfplat.lib;mf.lib;mfreadwrite.lib;mfuuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableDpiAwareness>true</EnableDpiAwareness>
@@ -157,6 +159,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="CodecAPIHelper.cpp" />
     <ClCompile Include="DesktopDuplication.cpp">
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(OutDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -165,16 +168,40 @@
     </ClCompile>
     <ClCompile Include="DisplayManager.cpp" />
     <ClCompile Include="DuplicationManager.cpp" />
+    <ClCompile Include="MFCodecList.cpp" />
+    <ClCompile Include="MFColorConverter.cpp" />
+    <ClCompile Include="MFFilter.cpp" />
+    <ClCompile Include="MFMSH264Encoder.cpp" />
+    <ClCompile Include="MFMuxAsync.cpp" />
+    <ClCompile Include="MFNVENCH264Encoder.cpp" />
+    <ClCompile Include="MFUtils.cpp" />
+    <ClCompile Include="MFVideoEncoder.cpp" />
     <ClCompile Include="OutputManager.cpp" />
     <ClCompile Include="ThreadManager.cpp" />
+    <ClCompile Include="VFDebug.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\..\Program Files (x86)\Windows Kits\10\Include\10.0.16299.0\um\wmcodecdsp.h" />
+    <ClInclude Include="CodecAPIHelper.h" />
     <ClInclude Include="CommonTypes.h" />
     <ClInclude Include="DisplayManager.h" />
     <ClInclude Include="DuplicationManager.h" />
+    <ClInclude Include="MFCodecList.h" />
+    <ClInclude Include="MFColorConverter.h" />
+    <ClInclude Include="MFFilter.h" />
+    <ClInclude Include="MFMSH264Encoder.h" />
+    <ClInclude Include="MFMuxAsync.h" />
+    <ClInclude Include="MFNVENCH264Encoder.h" />
+    <ClInclude Include="MFPipeline.h" />
+    <ClInclude Include="MFUtils.h" />
+    <ClInclude Include="MFVideoEncoder.h" />
     <ClInclude Include="OutputManager.h" />
+    <ClInclude Include="RingBuffer.h" />
+    <ClInclude Include="Structs.h" />
     <ClInclude Include="ThreadManager.h" />
+    <ClInclude Include="VFDebug.h" />
+    <ClInclude Include="VFMFCaptureEnums.h" />
+    <ClInclude Include="VFMFCaptureTypes.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="PixelShader.hlsl">
@@ -228,6 +255,9 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
     </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="changelog.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
