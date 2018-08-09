@@ -4,8 +4,7 @@
 
 #include <codecapi.h>
 #include <Shlwapi.h>
-//#include <boost/lockfree/policies.hpp>
-//#include <boost/lockfree/queue.hpp>
+
 #include <debugapi.h>
 #include <icrsint.h>
 #include <mfapi.h>
@@ -21,10 +20,16 @@
 
 #pragma comment(lib, "wmcodecdspuuid.lib")
 MFMSH264Encoder::MFMSH264Encoder(MFPipeline* pipeline, const VFVideoMediaType sourceMediaType, const VFMFVideoEncoderSettings settings) :
-	MFVideoEncoder(pipeline, sourceMediaType, settings)
+	MFVideoEncoder(pipeline, sourceMediaType, settings),
+	CodecAPIHelper(nullptr),
+	_encoder(nullptr),
+	_inType(nullptr),
+	_firstSample(TRUE),
+	_baseTime(0),
+	_outFramesCount(0),
+	_inFramesCount(0),
+	_encodeThread(nullptr)
 {
-	this->pEncoder = nullptr;
-	this->pInType = nullptr;
 	this->OutputMediaType = nullptr;
 
 	CodecAPIHelper = new ::CodecAPIHelper(pipeline);
@@ -42,8 +47,8 @@ MFMSH264Encoder::~MFMSH264Encoder()
 {
 	//encoderCb->Release();
 
-	SafeRelease(&pEncoder);
-	SafeRelease(&pInType);
+	SafeRelease(&_encoder);
+	SafeRelease(&_inType);
 	SafeRelease(&OutputMediaType);
 
 	delete CodecAPIHelper;
@@ -51,13 +56,11 @@ MFMSH264Encoder::~MFMSH264Encoder()
 
 void MFMSH264Encoder::ProcessData()
 {
-	if (pEncoder == nullptr)
+	if (_encoder == nullptr)
 	{
 		TraceE(L"Unable to process data in video encoder.");
 		return;
 	}
-
-	HRESULT hr = 0;
 
 	Finished = FALSE;
 	StopFlag = FALSE;
@@ -67,15 +70,15 @@ void MFMSH264Encoder::ProcessData()
 	_inFramesCount = 0;	
 
 	//TraceD(L"Start Video Encoder\n");
-	pEncoder->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, NULL);
-	pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
-	pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
+	_encoder->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, NULL);
+	_encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
+	_encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
 
 	//get the size of the output buffer processed by the encoder.
 	//There is only one output so the output stream id is 0.
 	memset(&_outStreamInfo, 0, sizeof(MFT_OUTPUT_STREAM_INFO));
 	ZeroMemory(&_outStreamInfo, sizeof(MFT_OUTPUT_STREAM_INFO));
-	TESTHR(hr = pEncoder->GetOutputStreamInfo(0, &_outStreamInfo));
+	TESTHR(_encoder->GetOutputStreamInfo(0, &_outStreamInfo));
 
 	ProcessInput();
 
@@ -86,10 +89,9 @@ HRESULT MFMSH264Encoder::ProcessInput()
 {
 	while (!(StopFlag && Pipeline->videoCapBuffer->empty()))
 	{
-
-		IMFSample* pSample = NULL;
+		IMFSample* pSample = nullptr;
 		pSample = Pipeline->videoCapBuffer->pop();
-		if (pSample == NULL)
+		if (pSample == nullptr)
 		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(3));
 			continue;
@@ -97,6 +99,7 @@ HRESULT MFMSH264Encoder::ProcessInput()
 
 		if (_inFramesCount % Settings.MaxKeyFrameSpacing == 0)
 		{
+			// ReSharper disable once CppExpressionWithoutSideEffects
 			ForceKeyFrame();
 		}
 
@@ -122,16 +125,16 @@ HRESULT MFMSH264Encoder::Encode(IMFSample* m_pSample)
 		return E_INVALIDARG;
 	}
 
-	if (!pEncoder)
+	if (!_encoder)
 	{
 		return MF_E_NOT_INITIALIZED;
 	}
 
-	HRESULT hr = S_OK;
-			
 	//Send input to the encoder.
 	LONGLONG llTimeStamp = 0;
-	hr = m_pSample->GetSampleTime(&llTimeStamp);
+	HRESULT hr;
+
+	TESTHR(hr = m_pSample->GetSampleTime(&llTimeStamp));
 	if (_firstSample)
 	{
 		_baseTime = llTimeStamp;
@@ -142,7 +145,7 @@ HRESULT MFMSH264Encoder::Encode(IMFSample* m_pSample)
 	llTimeStamp -= _baseTime;
 
 	TESTHR(hr = m_pSample->SetSampleTime(llTimeStamp));
-	TESTHR(hr = pEncoder->ProcessInput(0, m_pSample, 0));
+	TESTHR(hr = _encoder->ProcessInput(0, m_pSample, 0));
 
 	ProcessOutput();
 
@@ -151,11 +154,10 @@ HRESULT MFMSH264Encoder::Encode(IMFSample* m_pSample)
 
 void MFMSH264Encoder::ProcessOutput()
 {
-	HRESULT hr = S_OK, hrRes = S_OK;
 	DWORD dwStatus = 0;
 
-	IMFMediaBuffer* pBufferOut = NULL;
-	IMFSample* pSampleOut = NULL;
+	IMFMediaBuffer* pBufferOut = nullptr;
+	IMFSample* pSampleOut = nullptr;
 
 	while (true)
 	{
@@ -165,7 +167,7 @@ void MFMSH264Encoder::ProcessOutput()
 		//}
 
 		DWORD flags = 0;
-		hr = pEncoder->GetOutputStatus(&flags);
+		HRESULT hr = _encoder->GetOutputStatus(&flags);
 		if (flags != MFT_OUTPUT_STATUS_SAMPLE_READY && hr != E_NOTIMPL)
 		{
 			break;
@@ -179,7 +181,7 @@ void MFMSH264Encoder::ProcessOutput()
 		TESTHR(hr = pSampleOut->AddBuffer(pBufferOut));
 		mftOutputData.pSample = pSampleOut;
 		mftOutputData.dwStreamID = 0;
-		hrRes = pEncoder->ProcessOutput(0, 1, &mftOutputData, &dwStatus);
+		const HRESULT hrRes = _encoder->ProcessOutput(0, 1, &mftOutputData, &dwStatus);
 
 		//If more input is needed there was no output to process. Return and repeat
 		if (hrRes == S_OK)
@@ -217,16 +219,16 @@ void MFMSH264Encoder::ProcessOutput()
 
 		if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT)
 		{
-			hr = S_OK;	//Do not log valid error
+			//Do not log valid error
 		}
 	}
 }
 
 void MFMSH264Encoder::Join() const
 {
-	if (encodeThread)
+	if (_encodeThread)
 	{
-		encodeThread->join();
+		_encodeThread->join();
 	}
 }
 
@@ -238,7 +240,7 @@ HRESULT MFMSH264Encoder::Start()
 	}
 
 	StopFlag = FALSE;
-	encodeThread = new std::thread(&MFMSH264Encoder::ProcessData, this);
+	_encodeThread = new std::thread(&MFMSH264Encoder::ProcessData, this);
 
 	return S_OK;
 }
@@ -253,22 +255,22 @@ HRESULT MFMSH264Encoder::Stop()
 		continue;
 	}
 
-	if (pEncoder == nullptr)
+	if (_encoder == nullptr)
 	{
 		Finished = TRUE;
 		return S_OK;
 	}
 
-	pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, NULL);
-	pEncoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, NULL);
-	pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, NULL);
+	_encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, NULL);
+	_encoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, NULL);
+	_encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, NULL);
 	
 	ProcessOutput();
 
 	Sleep(500);
 
 	IMFShutdown* shutdown;
-	if (pEncoder && SUCCEEDED(pEncoder->QueryInterface(&shutdown))) 
+	if (_encoder && SUCCEEDED(_encoder->QueryInterface(&shutdown)))
 	{
 		shutdown->Shutdown();
 	}
@@ -288,7 +290,7 @@ HRESULT MFMSH264Encoder::ForceKeyFrame() const
 
 HRESULT MFMSH264Encoder::ApplySettings()
 {
-	HRESULT hr = pEncoder->QueryInterface(IID_ICodecAPI, (void**)&codecAPI);
+	const HRESULT hr = _encoder->QueryInterface(IID_ICodecAPI, (void**)&codecAPI);
 	if (hr == S_OK)
 	{
 		TESTHR(CodecAPIHelper->SetAdaptiveMode(codecAPI, Settings.AdaptiveMode));
@@ -366,19 +368,19 @@ bool MFMSH264Encoder::Init()
 		
 		if (SUCCEEDED(hr))
 		{
-			hr = spXferUnk->QueryInterface(IID_PPV_ARGS(&pEncoder));
+			hr = spXferUnk->QueryInterface(IID_PPV_ARGS(&_encoder));
 		}
 
 		if (FAILED(hr))
 		{
-			pEncoder = nullptr;
+			_encoder = nullptr;
 		}
 	}
 	else
 	{
 		UINT32 count = 0;
 		IMFActivate ** activate = nullptr;
-		MFT_REGISTER_TYPE_INFO info = { 0 };
+		MFT_REGISTER_TYPE_INFO info;
 
 		info.guidMajorType = MFMediaType_Video;
 		info.guidSubtype = MFVideoFormat_H264;
@@ -396,7 +398,7 @@ bool MFMSH264Encoder::Init()
 			goto done;
 		}
 
-		TESTHR(hr = activate[count - 1]->ActivateObject(IID_PPV_ARGS(&pEncoder)));
+		TESTHR(hr = activate[count - 1]->ActivateObject(IID_PPV_ARGS(&_encoder)));
 
 	done:
 		for (UINT32 idx = 0; idx < count; idx++)
@@ -408,23 +410,23 @@ bool MFMSH264Encoder::Init()
 	}
 
 	//Enable async mode
-	IMFAttributes *pAttributes = NULL;
-	hr = pEncoder->GetAttributes(&pAttributes);
-	hr = pAttributes->SetUINT32(MF_TRANSFORM_ASYNC_UNLOCK, TRUE);
+	IMFAttributes *pAttributes = nullptr;
+	TESTHR(hr = _encoder->GetAttributes(&pAttributes));
+	TESTHR(hr = pAttributes->SetUINT32(MF_TRANSFORM_ASYNC_UNLOCK, TRUE));
 
 	SafeRelease(&pAttributes);
 
 	//Get Stream info
 	DWORD inMin = 0, inMax = 0, outMin = 0, outMax = 0;
-	pEncoder->GetStreamLimits(&inMin, &inMax, &outMin, &outMax);
+	_encoder->GetStreamLimits(&inMin, &inMax, &outMin, &outMax);
 
 	DWORD inStreamsCount = 0, outStreamsCount = 0;
-	pEncoder->GetStreamCount(&inStreamsCount, &outStreamsCount);
+	_encoder->GetStreamCount(&inStreamsCount, &outStreamsCount);
 
-	DWORD *inStreams = new DWORD[inStreamsCount];
-	DWORD *outStreams = new DWORD[outStreamsCount];
+	const auto inStreams = new DWORD[inStreamsCount];
+	const auto outStreams = new DWORD[outStreamsCount];
 
-	hr = pEncoder->GetStreamIDs(inStreamsCount, inStreams, outStreamsCount, outStreams);
+	hr = _encoder->GetStreamIDs(inStreamsCount, inStreams, outStreamsCount, outStreams);
 
 	if (hr != S_OK)
 	{
@@ -461,7 +463,7 @@ bool MFMSH264Encoder::Init()
 
 	ApplySettings();
 
-	hr = pEncoder->SetOutputType(outStreams[0], OutputMediaType, 0);
+	hr = _encoder->SetOutputType(outStreams[0], OutputMediaType, 0);
 
 	if (FAILED(hr))
 	{
@@ -472,24 +474,24 @@ bool MFMSH264Encoder::Init()
 	GUID format;
 	for (int i = 0; ; i++)
 	{
-		hr = pEncoder->GetInputAvailableType(inStreams[0], i, &pInType);
+		hr = _encoder->GetInputAvailableType(inStreams[0], i, &_inType);
 		if (hr != S_OK) break;
 
-		pInType->GetGUID(MF_MT_SUBTYPE, &format);
+		_inType->GetGUID(MF_MT_SUBTYPE, &format);
 
 		if (format == MFVideoFormat_NV12) 
 			break;
 
-		SafeRelease(&pInType);
+		SafeRelease(&_inType);
 	}
 
-	if (pInType == NULL)
+	if (_inType == nullptr)
 	{
 		TraceE(L"Video Encoder: Failed to get input type.\n");
 		return false;
 	}
 
-	hr = pEncoder->SetInputType(inStreams[0], pInType, 0);
+	hr = _encoder->SetInputType(inStreams[0], _inType, 0);
 	if (FAILED(hr))
 	{
 		TraceE(L"Video Encoder: Failed to set input type.\n");

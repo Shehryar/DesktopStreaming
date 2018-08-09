@@ -22,16 +22,6 @@
 class MFNVENCH264Encoder : public MFVideoEncoder
 {
 public:
-	/*
-	Constructor
-	in_buffer:     raw video input samples
-	out_buffer:    encoded video output samples
-	frameWidth:    video width
-	frameHeight:   video height
-	frameRate:     video frame rate
-	frameAspect:   video frame aspect
-	bitrate:       desired output bitrate
-	*/
 	MFNVENCH264Encoder(MFPipeline* pipeline, VFVideoMediaType sourceMediaType, VFMFVideoEncoderSettings settings);
 	~MFNVENCH264Encoder();
 
@@ -64,20 +54,21 @@ private:
 
 		LONGLONG CurrentPosition();
 	private:
-		MFNVENCH264Encoder *pEncodeH264;
-		long ref_count;
+		MFNVENCH264Encoder *_encoderH264;
+		long _refCount;
 
-		LONGLONG m_nInFramesCount, m_nOutFramesCount;
-		MFPipeline* Pipeline;
+		LONGLONG _inFramesCount;
+		LONGLONG _outFramesCount;
+		MFPipeline* _pipeline;
 
 		BOOL _firstSample;
 		LONGLONG _baseTime;
 
 		LONGLONG _lastTimestamp;
 
-		inline void TESTHR(HRESULT _hr)
+		inline void TESTHR(HRESULT _hr) const
 		{
-			pEncodeH264->TESTHR(_hr);
+			_encoderH264->TESTHR(_hr);
 		}
 	};
 
@@ -89,10 +80,10 @@ private:
 	/*
 	Media Foundation Environment and variables
 	*/
-	IMFTransform *pEncoder;
-	IMFMediaType *pInType;
-	IMFMediaEventGenerator *pEvGenerator;
-	EncoderEventCallback *encoderCb;
-	MFT_INPUT_STREAM_INFO inStreamInfo;
-	MFT_OUTPUT_STREAM_INFO outStreamInfo;
+	IMFTransform *_encoder;
+	IMFMediaType *_inType;
+	IMFMediaEventGenerator *_evGenerator;
+	EncoderEventCallback *_encoderCb;
+	MFT_INPUT_STREAM_INFO _inStreamInfo;
+	MFT_OUTPUT_STREAM_INFO _outStreamInfo;
 };

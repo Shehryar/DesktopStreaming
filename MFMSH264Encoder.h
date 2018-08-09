@@ -22,16 +22,6 @@
 class MFMSH264Encoder : public MFVideoEncoder
 {
 public:
-	/*
-	Constructor
-	in_buffer:     raw video input samples
-	out_buffer:    encoded video output samples
-	frameWidth:    video width
-	frameHeight:   video height
-	frameRate:     video frame rate
-	frameAspect:   video frame aspect
-	bitrate:       desired output bitrate
-	*/
 	MFMSH264Encoder(MFPipeline* pipeline, VFVideoMediaType sourceMediaType, VFMFVideoEncoderSettings settings);
 	~MFMSH264Encoder();
 
@@ -62,10 +52,10 @@ private:
 	/*
 	Media Foundation Environment and variables
 	*/
-	IMFTransform *pEncoder;
-	IMFMediaType *pInType;
+	IMFTransform *_encoder;
+	IMFMediaType *_inType;
 
-	MFT_INPUT_STREAM_INFO inStreamInfo;
+	MFT_INPUT_STREAM_INFO _inStreamInfo;
 	MFT_OUTPUT_STREAM_INFO _outStreamInfo;
 
 	BOOL _firstSample;
@@ -76,5 +66,5 @@ private:
 	/*
 	Thread reference
 	*/
-	std::thread *encodeThread;
+	std::thread *_encodeThread;
 };

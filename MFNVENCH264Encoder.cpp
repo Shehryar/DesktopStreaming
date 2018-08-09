@@ -15,14 +15,19 @@
 #include "CodecAPIHelper.h"
 
 MFNVENCH264Encoder::MFNVENCH264Encoder(MFPipeline* pipeline, const VFVideoMediaType sourceMediaType, const VFMFVideoEncoderSettings settings) :
-	MFVideoEncoder(pipeline, sourceMediaType, settings)
+	MFVideoEncoder(pipeline, sourceMediaType, settings),
+	CodecAPIHelper(nullptr),
+	_encoder(nullptr),
+	_inType(nullptr),
+	_evGenerator(nullptr),
+	_encoderCb(nullptr)
 {
 	CodecAPIHelper = new ::CodecAPIHelper(pipeline);
 
-	this->pEncoder = NULL;
-	this->pInType = NULL;
-	this->OutputMediaType = NULL;
-	this->pEvGenerator = NULL;
+	this->_encoder = nullptr;
+	this->_inType = nullptr;
+	this->OutputMediaType = nullptr;
+	this->_evGenerator = nullptr;
 
 	this->Init();
 }
@@ -31,10 +36,10 @@ MFNVENCH264Encoder::~MFNVENCH264Encoder()
 {
 	//encoderCb->Release();
 
-	SafeRelease(&pEncoder);
-	SafeRelease(&pInType);
+	SafeRelease(&_encoder);
+	SafeRelease(&_inType);
 	SafeRelease(&OutputMediaType);
-	SafeRelease(&pEvGenerator);
+	SafeRelease(&_evGenerator);
 
 	delete CodecAPIHelper;
 }
@@ -50,29 +55,29 @@ HRESULT MFNVENCH264Encoder::Start()
 	StopFlag = FALSE;
 
 	//TraceD(L"Start Video Encoder\n");
-	pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
-	pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
+	_encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
+	_encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
 
 	return S_OK;
 }
 
 HRESULT MFNVENCH264Encoder::Stop()
 {
-	if (pEncoder == nullptr)
+	if (_encoder == nullptr)
 	{
 		Finished = TRUE;
 		return S_OK;
 	}
 
-	pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, NULL);
-	pEncoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, NULL);
+	_encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, NULL);
+	_encoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, NULL);
 
 	StopFlag = TRUE;
 
 	Sleep(500);
 
 	IMFShutdown* shutdown;
-	if (pEncoder && SUCCEEDED(pEncoder->QueryInterface(&shutdown)))
+	if (_encoder && SUCCEEDED(_encoder->QueryInterface(&shutdown)))
 	{
 		shutdown->Shutdown();
 	}
@@ -92,7 +97,7 @@ HRESULT MFNVENCH264Encoder::ForceKeyFrame() const
 
 HRESULT MFNVENCH264Encoder::ApplySettings()
 {
-	HRESULT hr = pEncoder->QueryInterface(IID_ICodecAPI, (void**)&codecAPI);
+	const HRESULT hr = _encoder->QueryInterface(IID_ICodecAPI, (void**)&codecAPI);
 	if (hr == S_OK)
 	{
 		TESTHR(CodecAPIHelper->SetCommonRateControlMode(codecAPI, Settings.RateControlMode));
@@ -156,15 +161,13 @@ HRESULT MFNVENCH264Encoder::ApplySettings()
 
 bool MFNVENCH264Encoder::Init()
 {
-	HRESULT hr;
-
 	IMFActivate *codecActivate;
 	MFCodecList codecs;
 
-	GUID mediaFormat = MFVideoFormat_H264;
+	const GUID mediaFormat = MFVideoFormat_H264;
 
 	codecs.Enumerate(MFMediaType_Video, MFVideoFormat_H264, TRUE);
-	hr = codecs.GetNVENCH264Encoder(&codecActivate);
+	HRESULT hr = codecs.GetNVENCH264Encoder(&codecActivate);
 
 	if (FAILED(hr))
 	{
@@ -172,7 +175,7 @@ bool MFNVENCH264Encoder::Init()
 		return false;
 	}
 
-	hr = codecActivate->ActivateObject(IID_PPV_ARGS(&pEncoder));
+	hr = codecActivate->ActivateObject(IID_PPV_ARGS(&_encoder));
 
 	if (FAILED(hr))
 	{
@@ -184,23 +187,23 @@ bool MFNVENCH264Encoder::Init()
 
 
 	//Enable async mode
-	IMFAttributes *pAttributes = NULL;
-	hr = pEncoder->GetAttributes(&pAttributes);
-	hr = pAttributes->SetUINT32(MF_TRANSFORM_ASYNC_UNLOCK, TRUE);
+	IMFAttributes *pAttributes = nullptr;
+	TESTHR(hr = _encoder->GetAttributes(&pAttributes));
+	TESTHR(hr = pAttributes->SetUINT32(MF_TRANSFORM_ASYNC_UNLOCK, TRUE));
 
 	SafeRelease(&pAttributes);
 
 	//Get Stream info
 	DWORD inMin = 0, inMax = 0, outMin = 0, outMax = 0;
-	pEncoder->GetStreamLimits(&inMin, &inMax, &outMin, &outMax);
+	_encoder->GetStreamLimits(&inMin, &inMax, &outMin, &outMax);
 
 	DWORD inStreamsCount = 0, outStreamsCount = 0;
-	pEncoder->GetStreamCount(&inStreamsCount, &outStreamsCount);
+	_encoder->GetStreamCount(&inStreamsCount, &outStreamsCount);
 
-	DWORD *inStreams = new DWORD[inStreamsCount];
-	DWORD *outStreams = new DWORD[outStreamsCount];
+	const auto inStreams = new DWORD[inStreamsCount];
+	const auto outStreams = new DWORD[outStreamsCount];
 
-	hr = pEncoder->GetStreamIDs(inStreamsCount, inStreams, outStreamsCount, outStreams);
+	hr = _encoder->GetStreamIDs(inStreamsCount, inStreams, outStreamsCount, outStreams);
 
 	if (hr != S_OK)
 	{
@@ -237,7 +240,7 @@ bool MFNVENCH264Encoder::Init()
 
 	ApplySettings();
 
-	hr = pEncoder->SetOutputType(outStreams[0], OutputMediaType, 0);
+	hr = _encoder->SetOutputType(outStreams[0], OutputMediaType, 0);
 
 	if (FAILED(hr))
 	{
@@ -248,10 +251,10 @@ bool MFNVENCH264Encoder::Init()
 	GUID format;
 	for (int i = 0; ; i++)
 	{
-		hr = pEncoder->GetInputAvailableType(inStreams[0], i, &pInType);
+		hr = _encoder->GetInputAvailableType(inStreams[0], i, &_inType);
 		if (hr != S_OK) break;
 
-		pInType->GetGUID(MF_MT_SUBTYPE, &format);
+		_inType->GetGUID(MF_MT_SUBTYPE, &format);
 
 		/*if (IsEqualGUID(format, *sourceVideoFormat))
 		{
@@ -263,31 +266,31 @@ bool MFNVENCH264Encoder::Init()
 
 		//if (format == MFVideoFormat_UYVY) break;
 		//if (format == MFVideoFormat_IYUV) break;
-		SafeRelease(&pInType);
+		SafeRelease(&_inType);
 	}
 
-	if (pInType == NULL)
+	if (_inType == nullptr)
 	{
 		TraceE(L"Video Encoder: Failed to get input type.\n");
 		return false;
 	}
 
-	hr = pEncoder->SetInputType(inStreams[0], pInType, 0);
+	hr = _encoder->SetInputType(inStreams[0], _inType, 0);
 	if (FAILED(hr))
 	{
 		TraceE(L"Video Encoder: Failed to set input type.\n");
 		return false;
 	}
 
-	hr = pEncoder->QueryInterface(IID_PPV_ARGS(&pEvGenerator));
+	hr = _encoder->QueryInterface(IID_PPV_ARGS(&_evGenerator));
 	if (FAILED(hr))
 	{
 		TraceE(L"Video Encoder: Failed to expose interface.\n");
 		return false;
 	}
 
-	encoderCb = new EncoderEventCallback(Pipeline, this);
-	pEvGenerator->BeginGetEvent(encoderCb, NULL);
+	_encoderCb = new EncoderEventCallback(Pipeline, this);
+	_evGenerator->BeginGetEvent(_encoderCb, nullptr);
 
 	if (hr == S_OK)
 	{
@@ -297,17 +300,18 @@ bool MFNVENCH264Encoder::Init()
 	return SUCCEEDED(hr);
 }
 
-MFNVENCH264Encoder::EncoderEventCallback::EncoderEventCallback(MFPipeline *pipeline, MFNVENCH264Encoder *pEncoder)
+MFNVENCH264Encoder::EncoderEventCallback::EncoderEventCallback(MFPipeline *pipeline, MFNVENCH264Encoder *pEncoder) :
+	_encoderH264(nullptr),
+	_refCount(0),
+	_inFramesCount(0),
+	_outFramesCount(0),
+	_pipeline(nullptr),
+	_firstSample(TRUE),
+	_baseTime(0),
+	_lastTimestamp(0)
 {
-	Pipeline = pipeline;
-	pEncodeH264 = pEncoder;
-
-	m_nInFramesCount = 0;
-	m_nOutFramesCount = 0;
-
-	_firstSample = TRUE;
-	_baseTime = 0;
-	_lastTimestamp = 0;
+	_pipeline = pipeline;
+	_encoderH264 = pEncoder;
 }
 
 MFNVENCH264Encoder::EncoderEventCallback::~EncoderEventCallback()
@@ -327,12 +331,12 @@ STDMETHODIMP MFNVENCH264Encoder::EncoderEventCallback::QueryInterface(REFIID _ri
 
 STDMETHODIMP_(ULONG) MFNVENCH264Encoder::EncoderEventCallback::AddRef()
 {
-	return InterlockedIncrement(&ref_count);
+	return InterlockedIncrement(&_refCount);
 }
 
 STDMETHODIMP_(ULONG) MFNVENCH264Encoder::EncoderEventCallback::Release()
 {
-	long result = InterlockedDecrement(&ref_count);
+	const long result = InterlockedDecrement(&_refCount);
 
 	if (result == 0)
 	{
@@ -349,9 +353,10 @@ STDMETHODIMP MFNVENCH264Encoder::EncoderEventCallback::GetParameters(DWORD *p_fl
 
 LONGLONG MFNVENCH264Encoder::CurrentPosition()
 {
-	return encoderCb->CurrentPosition();
+	return _encoderCb->CurrentPosition();
 }
 
+// ReSharper disable once CppMemberFunctionMayBeConst
 LONGLONG MFNVENCH264Encoder::EncoderEventCallback::CurrentPosition()
 {
 	return _lastTimestamp;
@@ -359,26 +364,26 @@ LONGLONG MFNVENCH264Encoder::EncoderEventCallback::CurrentPosition()
 
 STDMETHODIMP MFNVENCH264Encoder::EncoderEventCallback::Invoke(IMFAsyncResult *pAsyncResult)
 {
-	if (pEncodeH264->StopFlag && Pipeline->videoCapBuffer->empty())
+	if (_encoderH264->StopFlag && _pipeline->videoCapBuffer->empty())
 	{
-		pEncodeH264->Finished = TRUE;
+		_encoderH264->Finished = TRUE;
 		return S_OK;
 	}
 
-	if (pEncodeH264->StopFlag)
+	if (_encoderH264->StopFlag)
 	{
 		Sleep(500);
 	}
 
 	//pEncodeH264->TraceD(L"Video encoder callback\n");
 
-	IMFMediaEvent *pMediaEvent = NULL;
+	IMFMediaEvent *pMediaEvent = nullptr;
 	MediaEventType evType = MEUnknown;
 	HRESULT hr = S_OK;
 
 	DWORD status;
 
-	TESTHR(pEncodeH264->pEvGenerator->EndGetEvent(pAsyncResult, &pMediaEvent));
+	TESTHR(_encoderH264->_evGenerator->EndGetEvent(pAsyncResult, &pMediaEvent));
 
 	TESTHR(pMediaEvent->GetType(&evType));
 	TESTHR(pMediaEvent->GetStatus(&hr));
@@ -387,16 +392,16 @@ STDMETHODIMP MFNVENCH264Encoder::EncoderEventCallback::Invoke(IMFAsyncResult *pA
 
 	if (evType == METransformNeedInput)
 	{
-		while (!pEncodeH264->StopFlag && Pipeline->videoCapBuffer->empty())
+		while (!_encoderH264->StopFlag && _pipeline->videoCapBuffer->empty())
 		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));
 		}
 
-		IMFSample *pSample = Pipeline->videoCapBuffer->pop();
+		IMFSample *pSample = _pipeline->videoCapBuffer->pop();
 
-		if (pEncodeH264->StopFlag)
+		if (_encoderH264->StopFlag)
 		{
-			pEncodeH264->Finished = TRUE;
+			_encoderH264->Finished = TRUE;
 			return S_OK;
 		}
 
@@ -417,15 +422,16 @@ STDMETHODIMP MFNVENCH264Encoder::EncoderEventCallback::Invoke(IMFAsyncResult *pA
 
 		//pEncodeH264->TraceD(L"Push video frame %d to encoder\n", ++m_nInFramesCount);
 
-		if (m_nInFramesCount % pEncodeH264->Settings.MaxKeyFrameSpacing == 0)
+		if (_inFramesCount % _encoderH264->Settings.MaxKeyFrameSpacing == 0)
 		{
-			pEncodeH264->ForceKeyFrame();
+			// ReSharper disable once CppExpressionWithoutSideEffects
+			_encoderH264->ForceKeyFrame();
 		}
 
-		hr = pEncodeH264->pEncoder->ProcessInput(0, pSample, 0);
+		hr = _encoderH264->_encoder->ProcessInput(0, pSample, 0);
 		if (FAILED(hr))
 		{
-			pEncodeH264->TraceE(L"Video Encoder: Process Input Failed");
+			_encoderH264->TraceE(L"Video Encoder: Process Input Failed");
 		}
 
 		if (pSample)
@@ -442,15 +448,15 @@ STDMETHODIMP MFNVENCH264Encoder::EncoderEventCallback::Invoke(IMFAsyncResult *pA
 		MFT_OUTPUT_DATA_BUFFER outDataBuffer;
 		outDataBuffer.dwStatus = 0;
 		outDataBuffer.dwStreamID = 0;
-		outDataBuffer.pEvents = 0;
-		outDataBuffer.pSample = NULL;
+		outDataBuffer.pEvents = nullptr;
+		outDataBuffer.pSample = nullptr;
 
 		//pEncodeH264->TraceD(L"Get video frame %d from encoder\n", ++m_nOutFramesCount);
-		hr = pEncodeH264->pEncoder->ProcessOutput(0, 1, &outDataBuffer, &status);
+		hr = _encoderH264->_encoder->ProcessOutput(0, 1, &outDataBuffer, &status);
 		if (SUCCEEDED(hr))
 		{
 			//TraceD(L"Get videoframe %d from encoder...Done.\n", m_nOutFramesCount);
-			IMFMediaBuffer* pOutBuffer = NULL;
+			IMFMediaBuffer* pOutBuffer = nullptr;
 			outDataBuffer.pSample->GetBufferByIndex(0, &pOutBuffer);
 
 			DWORD totalLength = 0;
@@ -458,7 +464,7 @@ STDMETHODIMP MFNVENCH264Encoder::EncoderEventCallback::Invoke(IMFAsyncResult *pA
 			//XTrace("Output Processed: l: " << totalLength);
 
 			outDataBuffer.pSample->AddRef();
-			Pipeline->videoEncBuffer->push(outDataBuffer.pSample);
+			_pipeline->videoEncBuffer->push(outDataBuffer.pSample);
 
 			//m_Mux->WriteVideoSample(outDataBuffer.pSample, 0);
 
@@ -474,14 +480,14 @@ STDMETHODIMP MFNVENCH264Encoder::EncoderEventCallback::Invoke(IMFAsyncResult *pA
 		{
 			if (hr == MF_E_TRANSFORM_STREAM_CHANGE)
 			{
-				pEncodeH264->TraceD(L"!!! Video Encoder: TRANSFORM STREAM CHANGE\n");
+				_encoderH264->TraceD(L"!!! Video Encoder: TRANSFORM STREAM CHANGE\n");
 
 				if (outDataBuffer.dwStatus & MFT_OUTPUT_DATA_BUFFER_FORMAT_CHANGE)
 				{
-					pEncodeH264->TraceD(L"!!! New MFT_OUTPUT_DATA_BUFFER_FORMAT_CHANGE event\n");
+					_encoderH264->TraceD(L"!!! New MFT_OUTPUT_DATA_BUFFER_FORMAT_CHANGE event\n");
 					IMFMediaType* pType;
-					TESTHR(hr = pEncodeH264->pEncoder->GetOutputAvailableType(0, 0, &pType));
-					TESTHR(hr = pEncodeH264->pEncoder->SetOutputType(0, pType, 0));
+					TESTHR(hr = _encoderH264->_encoder->GetOutputAvailableType(0, 0, &pType));
+					TESTHR(hr = _encoderH264->_encoder->SetOutputType(0, pType, 0));
 				}
 
 				/*hr = pEncodeH264->pEncoder->SetOutputType(0, pEncodeH264->pOutType, 0);
@@ -492,21 +498,21 @@ STDMETHODIMP MFNVENCH264Encoder::EncoderEventCallback::Invoke(IMFAsyncResult *pA
 			}
 			else
 			{
-				pEncodeH264->TraceE(L"Video Encoder: Process output failed");
+				_encoderH264->TraceE(L"Video Encoder: Process output failed");
 			}
 		}
 	}
 	else if (evType == METransformDrainComplete)
 	{
-		pEncodeH264->TraceD(L"New METransformDrainComplete event");
-		TESTHR(hr = pEncodeH264->pEncoder->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0));
+		_encoderH264->TraceD(L"New METransformDrainComplete event");
+		TESTHR(hr = _encoderH264->_encoder->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0));
 		//SetEvent(mEventDrainComplete);
 	}
 	else if (evType == MEError)
 	{
 		PROPVARIANT pValue;
 		TESTHR(hr = pMediaEvent->GetValue(&pValue));
-		pEncodeH264->TraceE(L"MEError, value: %u", pValue.vt);
+		_encoderH264->TraceE(L"MEError, value: %u", pValue.vt);
 		//error = true;
 		//SetEvent(mEventNeedInput);
 	}
@@ -514,11 +520,11 @@ STDMETHODIMP MFNVENCH264Encoder::EncoderEventCallback::Invoke(IMFAsyncResult *pA
 	{
 		PROPVARIANT pValue;
 		TESTHR(hr = pMediaEvent->GetValue(&pValue));
-		pEncodeH264->TraceE(L"Unknown event type: %lu, Value: %u", evType, pValue.vt);
+		_encoderH264->TraceE(L"Unknown event type: %lu, Value: %u", evType, pValue.vt);
 	}
 
 	//pMediaEvent->Release();
-	pEncodeH264->pEvGenerator->BeginGetEvent(this, NULL);
+	_encoderH264->_evGenerator->BeginGetEvent(this, nullptr);
 	return S_OK;
 }
 

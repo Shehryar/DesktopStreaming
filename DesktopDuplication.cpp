@@ -6,6 +6,8 @@
 // Copyright (c) Microsoft Corporation. All rights reserved
 //wprintf_s(L"Usage: %s inputaudio.mp3, %s output.wm*, %Encoding Type: CBR, VBR\n");
 
+// ReSharper disable CppInconsistentNaming
+
 #include <iostream> 
 #include <mfapi.h>
 #include <mfobjects.h>
@@ -27,6 +29,8 @@
 #include <ctime>
 #include <ratio>
 #include <chrono>
+#include "MFQSVEncoder.h"
+#include "MFCodecList.h"
 
 using namespace std::chrono;
 
@@ -194,13 +198,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	memset(&_pipeline, 0, sizeof(MFPipeline));
 
 	// Synchronization
-	HANDLE UnexpectedErrorEvent = nullptr;
-	HANDLE ExpectedErrorEvent = nullptr;
-	HANDLE TerminateThreadsEvent = nullptr;
-
-	// Window
-	HWND WindowHandle = nullptr;
-
 	const bool CmdResult = ProcessCmdline(&SingleOutput);
 	if (!CmdResult)
 	{
@@ -209,7 +206,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	}
 
 	// Event used by the threads to signal an unexpected error and we want to quit the app
-	UnexpectedErrorEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+
+	HANDLE UnexpectedErrorEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
 	if (!UnexpectedErrorEvent)
 	{
 		ProcessFailure(nullptr, L"UnexpectedErrorEvent creation failed", L"Error", E_UNEXPECTED);
@@ -217,7 +215,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	}
 
 	// Event for when a thread encounters an expected error
-	ExpectedErrorEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+	HANDLE ExpectedErrorEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
 	if (!ExpectedErrorEvent)
 	{
 		ProcessFailure(nullptr, L"ExpectedErrorEvent creation failed", L"Error", E_UNEXPECTED);
@@ -225,7 +223,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	}
 
 	// Event to tell spawned threads to quit
-	TerminateThreadsEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+	HANDLE TerminateThreadsEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
 	if (!TerminateThreadsEvent)
 	{
 		ProcessFailure(nullptr, L"TerminateThreadsEvent creation failed", L"Error", E_UNEXPECTED);
@@ -264,12 +262,12 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	// Create window
 	RECT WindowRect = { 0, 0, 800, 600 };
 	AdjustWindowRect(&WindowRect, WS_OVERLAPPEDWINDOW, FALSE);
-	WindowHandle = CreateWindowW(L"ddasample", L"DXGI desktop duplication sample",
+	const HWND window_handle = CreateWindowW(L"ddasample", L"DXGI desktop duplication sample",
 		WS_OVERLAPPEDWINDOW,
 		0, 0,
 		WindowRect.right - WindowRect.left, WindowRect.bottom - WindowRect.top,
 		nullptr, nullptr, hInstance, nullptr);
-	if (!WindowHandle)
+	if (!window_handle)
 	{
 		ProcessFailure(nullptr, L"Window creation failed", L"Error", E_FAIL);
 		return 0;
@@ -277,8 +275,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 	DestroyCursor(Cursor);
 
-	ShowWindow(WindowHandle, nCmdShow);
-	UpdateWindow(WindowHandle);
+	ShowWindow(window_handle, nCmdShow);
+	UpdateWindow(window_handle);
 
 	printLn("THIS IS A TEST");
 	THREADMANAGER ThreadMgr;
@@ -338,7 +336,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 			}
 
 			// Re-initialize
-			Ret = OutMgr.InitOutput(WindowHandle, SingleOutput, &OutputCount, &DeskBounds);
+			Ret = OutMgr.InitOutput(window_handle, SingleOutput, &OutputCount, &DeskBounds);
 			if (Ret == DUPL_RETURN_SUCCESS)
 			{
 				if (_pipeline.videnc == nullptr)
@@ -351,7 +349,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					_pipeline.videoEncBuffer = new MFRingBuffer(25);
 
 					VFVideoMediaType mt{};
-					memset(&mt, 0, sizeof(VFVideoMediaType));
+					//memset(&mt, 0, sizeof(VFVideoMediaType));
 
 					mt.Width = DeskBounds.right - DeskBounds.left;
 					mt.Height = DeskBounds.bottom - DeskBounds.top;
@@ -359,8 +357,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					mt.FrameRateDen = 1;
 					mt.SubType = MFVideoFormat_NV12;
 
-					VFMFVideoEncoderSettings settings;
-					memset(&settings, 0, sizeof(VFMFVideoEncoderSettings));
+					VFMFVideoEncoderSettings settings{};
+					//memset(&settings, 0, sizeof(VFMFVideoEncoderSettings));
 					settings.H264Profile = VFMFH264VProfile_Main;
 					settings.H264Level = VFMFH264VLevel4_2;
 					settings.AvgBitrate = 2000;
@@ -372,6 +370,23 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					settings.CABAC = true;
 					settings.AdaptiveMode = VFMFAdaptiveMode_None;
 
+					// enumerating codecs, use GPU encoder if available, H264 MS CPU if not available
+					MFCodecList _videoCodecs;
+					_videoCodecs.Enumerate(MFMediaType_Video, MFVideoFormat_H264, TRUE);
+
+					if (_videoCodecs.IsQSVH264EncoderAvailable())
+					{
+						settings.Encoder = VIDEO_ENCODER_QSV_H264;
+					}
+					else if (_videoCodecs.IsNVENCH264EncoderAvailable())
+					{
+						settings.Encoder = VIDEO_ENCODER_NVENC_H264;
+					}
+					else if (_videoCodecs.IsAMDH264EncoderAvailable())
+					{
+						settings.Encoder = VIDEO_ENCODER_AMD_H264;
+					}
+
 					BOOL hwEncoder = FALSE;											
 
 					switch (videoEncoder)
@@ -380,21 +395,17 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 						_pipeline.videnc = new MFMSH264Encoder(&_pipeline, mt, settings);
 						break;
 					case VIDEO_ENCODER_QSV_H264:
+						hwEncoder = TRUE;
+						_pipeline.videnc = new MFQSVEncoder(&_pipeline, mt, settings);
 						break;
 					case VIDEO_ENCODER_NVENC_H264:
 						hwEncoder = TRUE;
 						_pipeline.videnc = new MFNVENCH264Encoder(&_pipeline, mt, settings);
 						break;
-					case VIDEO_ENCODER_AMD_H264:
-						break;
-					case VIDEO_ENCODER_MS_H265:
-						break;
-					case VIDEO_ENCODER_QSV_H265:
-						break;
-					case VIDEO_ENCODER_NVENC_H265:
-						break;
-					case VIDEO_ENCODER_AMD_H265:
-						break;
+					//case VIDEO_ENCODER_AMD_H264:
+					//	hwEncoder = TRUE;
+					//	_pipeline.videnc = new MFAMDH264Encoder(&_pipeline, mt, settings);
+					//	break;
 					default:;
 					}
 
@@ -410,6 +421,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 						return 1;
 					}
 
+					printLn("Output file set to c:\\vf\\output.mp4");
 					_pipeline.mux = new MFMuxAsync(&_pipeline, L"c:\\vf\\output.mp4", mt, hwEncoder);
 					if (_pipeline.mux == nullptr)
 					{
@@ -510,7 +522,10 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 			Sleep(10);
 		}
 
-		_pipeline.mux->ShutdownAndSaveFile();
+		if (_pipeline.mux->ShutdownAndSaveFile() != S_OK)
+		{
+			printLn("Unable to save output file.");
+		}
 	}
 
 	Sleep(2000);
@@ -535,7 +550,9 @@ void DEBUG_OUTPUT(LPCWSTR lpszFormat, ...)
 	va_list args;
 	va_start(args, lpszFormat);
 	TCHAR szBuffer[512]; // get rid of this hard-coded buffer
-	auto nBuf = _vsnwprintf(szBuffer, 511, lpszFormat, args);
+
+	// ReSharper disable once CppDeprecatedEntity
+	_vsnwprintf(szBuffer, 511, lpszFormat, args);
 
 	::OutputDebugString(szBuffer);	
 
@@ -578,7 +595,7 @@ BYTE* GetImageData(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Tex
 		context->CopyResource(texTemp, texture);
 
 		D3D11_MAPPED_SUBRESOURCE  mapped;
-		unsigned int subresource = 0;
+		//unsigned int subresource = 0;
 		hr = context->Map(texTemp, 0, D3D11_MAP_READ, 0, &mapped);
 		if (FAILED(hr))
 		{
@@ -592,9 +609,9 @@ BYTE* GetImageData(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Tex
 		*nHeight = description.Height;
 		*pitch = mapped.RowPitch;
 
-		BYTE* source = (BYTE*)(mapped.pData);
-		BYTE* dest = new BYTE[(*nWidth)*(*nHeight) * 4];
-		BYTE* destTemp = dest;
+		auto source = (BYTE*)(mapped.pData);
+		const auto dest = new BYTE[(*nWidth)*(*nHeight) * 4];
+		auto destTemp = dest;
 
 		for (int i = 0; i < *nHeight; ++i)
 		{
@@ -610,6 +627,7 @@ BYTE* GetImageData(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Tex
 
 		return dest;
 	}
+	// ReSharper disable once CppRedundantElseKeywordInsideCompoundStatement
 	else
 	{
 		DEBUG_OUTPUT_S(L"GetImageData - texture null - FAILED \n");
@@ -619,8 +637,6 @@ BYTE* GetImageData(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Tex
 
 HRESULT EncodeFrame(_In_ ID3D11Device* device, _In_ ID3D11DeviceContext* context, _In_ ID3D11Texture2D *frameData, INT64 timestamp, INT64 duration)
 {
-	HRESULT result = S_OK;
-
 	if (!_pipeline.videnc->Initiated)
 	{
 		return E_FAIL;
@@ -750,12 +766,11 @@ DWORD WINAPI DDProc(_In_ void* Param)
 	IDXGIKeyedMutex* KeyMutex = nullptr;
 
 	// Data passed in from thread creation
-	THREAD_DATA* TData = reinterpret_cast<THREAD_DATA*>(Param);
+	auto TData = reinterpret_cast<THREAD_DATA*>(Param);
 
 	// Get desktop
 	DUPL_RETURN Ret;
-	HDESK CurrentDesktop = nullptr;
-	CurrentDesktop = OpenInputDesktop(0, FALSE, GENERIC_ALL);
+	HDESK CurrentDesktop = OpenInputDesktop(0, FALSE, GENERIC_ALL);
 	if (!CurrentDesktop)
 	{
 		// We do not have access to the desktop so request a retry
@@ -765,7 +780,7 @@ DWORD WINAPI DDProc(_In_ void* Param)
 	}
 
 	// Attach desktop to this thread
-	bool DesktopAttached = SetThreadDesktop(CurrentDesktop) != 0;
+	const bool DesktopAttached = SetThreadDesktop(CurrentDesktop) != 0;
 	CloseDesktop(CurrentDesktop);
 	CurrentDesktop = nullptr;
 	if (!DesktopAttached)
@@ -810,12 +825,10 @@ DWORD WINAPI DDProc(_In_ void* Param)
 	FRAME_DATA CurrentData;
 
 	const double frameRate = 10;
-	high_resolution_clock::time_point firstFrameTimestamp = high_resolution_clock::now();
-	INT64 frameDuration = 1000 / frameRate;
+	const high_resolution_clock::time_point firstFrameTimestamp = high_resolution_clock::now();
+	const INT64 frameDuration = 1000 / frameRate;
 	INT64 frameNumber = 0;
-	INT64 frameTimestamp = 0;
 
-	high_resolution_clock::time_point lastFrameTimestamp = high_resolution_clock::now();
 	high_resolution_clock::time_point currentTimestamp = high_resolution_clock::time_point();
 
 	while ((WaitForSingleObjectEx(TData->TerminateThreadsEvent, 0, FALSE) == WAIT_TIMEOUT))
@@ -852,8 +865,8 @@ DWORD WINAPI DDProc(_In_ void* Param)
 			//time_span = duration_cast<duration<double>>(currentTimestamp - lastFrameTimestamp);
 		}
 
-		lastFrameTimestamp = high_resolution_clock::now();
-		frameTimestamp = frameNumber * frameDuration;
+		high_resolution_clock::time_point lastFrameTimestamp = high_resolution_clock::now();
+		INT64 frameTimestamp = frameNumber * frameDuration;
 
 		const auto timeElapsedMS = static_cast<INT64>(time_elapsed.count() * 1000);
 		DEBUG_OUTPUT(L"Frame number: %lld, timestamp: %lld, timestamp diff: %lld\n", frameNumber, frameTimestamp, timeElapsedMS);
@@ -966,7 +979,7 @@ DUPL_RETURN ProcessFailure(_In_opt_ ID3D11Device* Device, _In_ LPCWSTR Str, _In_
 	// On an error check if the DX device is lost
 	if (Device)
 	{
-		HRESULT DeviceRemovedReason = Device->GetDeviceRemovedReason();
+		const HRESULT DeviceRemovedReason = Device->GetDeviceRemovedReason();
 
 		switch (DeviceRemovedReason)
 		{
@@ -1045,3 +1058,5 @@ void DisplayMsg(_In_ LPCWSTR Str, _In_ LPCWSTR Title, HRESULT hr)
 
 	delete[] OutStr;
 }
+
+// ReSharper restore CppInconsistentNaming

@@ -14,8 +14,8 @@
 
 class MFMuxAsync : public MFFilter
 {
-	LPWSTR lpstrFileName = NULL;
-	IMFSinkWriter* pSinkWriter = NULL;
+	LPWSTR lpstrFileName = nullptr;
+	IMFSinkWriter* pSinkWriter = nullptr;
 
 	MFTIME videoDuration = 0, audioDuration = 0;
 	CRITICAL_SECTION cs;

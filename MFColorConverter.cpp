@@ -9,13 +9,13 @@ extern "C"
 
 int GetStrideRGB24(int width)
 {
-	int stride = ((width * 3) - 1) / 4 * 4 + 4;
+	const int stride = ((width * 3) - 1) / 4 * 4 + 4;
 	return stride;
 }
 
 int GetStrideRGB32(int width)
 {
-	int stride = ((width * 4) - 1) / 4 * 4 + 4;
+	const int stride = ((width * 4) - 1) / 4 * 4 + 4;
 	return stride;
 }
 

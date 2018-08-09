@@ -4,7 +4,7 @@
 * Changed project structure, independent encoder class, with pipeline and queue
 * Implement frame rate
 * Timestamp and duration for an each frame
+* Added NVENC encoder
 
 ## ToDo
 
-* NVENC encoder
