@@ -362,7 +362,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					settings.H264Profile = VFMFH264VProfile_Main;
 					settings.H264Level = VFMFH264VLevel4_2;
 					settings.AvgBitrate = 2000;
-					settings.Encoder = VIDEO_ENCODER_MS_H264;
+					//settings.Encoder = VIDEO_ENCODER_MS_H264;
+					settings.Encoder = VIDEO_ENCODER_NVENC_H264;
 					settings.MaxKeyFrameSpacing = 10;
 					settings.InterlaceMode = VFMFVideoInterlace_Progressive;
 					settings.MaxBitrate = 3000;
@@ -824,7 +825,7 @@ DWORD WINAPI DDProc(_In_ void* Param)
 	bool WaitToProcessCurrentFrame = false;
 	FRAME_DATA CurrentData;
 
-	const double frameRate = 10;
+	const double frameRate = 60; // MARK - FPS
 	const high_resolution_clock::time_point firstFrameTimestamp = high_resolution_clock::now();
 	const INT64 frameDuration = 1000 / frameRate;
 	INT64 frameNumber = 0;
