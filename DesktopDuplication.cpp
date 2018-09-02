@@ -24,6 +24,7 @@
 #include "MFNVENCH264Encoder.h"
 #include "MFColorConverter.h"
 #include "MFMuxAsync.h"
+#include "MFMSAACEncoder.h"
 
 #include <iostream>
 #include <ctime>
@@ -40,6 +41,9 @@ using namespace std::chrono;
 #pragma comment(lib, "mfplay.lib")
 #pragma comment(lib, "evr.lib")
 #pragma comment(lib, "wmcodecdspuuid.lib")
+
+#define AUDIO_ENCODER 0
+#define FAKE_COORDINATES 0
 
 //
 // Globals
@@ -296,7 +300,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 		{
 			if (msg.message == OCCLUSION_STATUS_MSG)
 			{
-				// Present may not be occluded now so try again
+				// Present may not be occluded now so try ag  ain
 				Occluded = false;
 			}
 			else
@@ -351,8 +355,17 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					VFVideoMediaType mt{};
 					//memset(&mt, 0, sizeof(VFVideoMediaType));
 
+					if (FAKE_COORDINATES)
+					{
+						mt.Width = 1920; 
+						mt.Height = 1080;
+					}
+					else
+					{
 					mt.Width = DeskBounds.right - DeskBounds.left;
 					mt.Height = DeskBounds.bottom - DeskBounds.top;
+					}
+
 					mt.FrameRateNum = FRAME_RATE;
 					mt.FrameRateDen = 1;
 					mt.SubType = MFVideoFormat_NV12;
@@ -362,14 +375,14 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					settings.H264Profile = VFMFH264VProfile_Main;
 					settings.H264Level = VFMFH264VLevel4_2;
 					settings.AvgBitrate = 2000;
-					//settings.Encoder = VIDEO_ENCODER_MS_H264;
-					settings.Encoder = VIDEO_ENCODER_NVENC_H264;
+					settings.Encoder = VIDEO_ENCODER_MS_H264;
 					settings.MaxKeyFrameSpacing = 10;
 					settings.InterlaceMode = VFMFVideoInterlace_Progressive;
 					settings.MaxBitrate = 3000;
 					settings.Quality = 75;
-					settings.CABAC = true;
+					settings.CABAC = false;
 					settings.AdaptiveMode = VFMFAdaptiveMode_None;
+					settings.RateControlMode = VFMFCommonRateControlMode_CBR;
 
 					// enumerating codecs, use GPU encoder if available, H264 MS CPU if not available
 					MFCodecList _videoCodecs;
@@ -439,6 +452,12 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					}
 
 					_pipeline.videnc->Start();
+
+					if (_pipeline.audenc)
+					{
+						_pipeline.audenc->Start();
+					}
+
 					_pipeline.mux->Start();
 				}
 
@@ -451,6 +470,44 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 				{
 					DisplayMsg(L"Failed to get handle of shared surface", L"Error", S_OK);
 					Ret = DUPL_RETURN_ERROR_UNEXPECTED;
+				}
+			}
+
+			if (AUDIO_ENCODER)
+			{
+				if (_pipeline.audenc == nullptr)
+				{
+					VFMFAudioEncoder audioEncoder = AUDIO_ENCODER_MS_AAC;
+
+					//buffers
+					_pipeline.audioCapBuffer = new MFRingBuffer(200);
+					_pipeline.audioEncBuffer = new MFRingBuffer(200);
+
+					VFAudioMediaType mt{};
+					
+					const int channels = 2;
+					const int sampleRate = 44100;
+					const int bitrate = 128;
+
+					mt.BPS = 16;
+					mt.Channels = channels;
+					mt.SampleRate = sampleRate;
+					
+					_pipeline.HAS_AUDIO = TRUE;
+
+					_pipeline.audenc = new MFMSAACEncoder(&_pipeline, mt, bitrate);
+					
+					if (_pipeline.audenc == nullptr)
+					{
+						DisplayMsg(L"Failed to set audio encoder", L"Error", S_OK);
+						return 1;
+					}
+
+					if (!_pipeline.audenc->Initiated)
+					{
+						DisplayMsg(L"Failed to initiate audio encoder", L"Error", S_OK);
+						return 1;
+					}
 				}
 			}
 

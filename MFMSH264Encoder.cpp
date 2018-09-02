@@ -288,74 +288,6 @@ HRESULT MFMSH264Encoder::ForceKeyFrame() const
 	return E_FAIL;
 }
 
-HRESULT MFMSH264Encoder::ApplySettings()
-{
-	const HRESULT hr = _encoder->QueryInterface(IID_ICodecAPI, (void**)&codecAPI);
-	if (hr == S_OK)
-	{
-		TESTHR(CodecAPIHelper->SetAdaptiveMode(codecAPI, Settings.AdaptiveMode));
-
-		TESTHR(CodecAPIHelper->SetCommonRateControlMode(codecAPI, Settings.RateControlMode));
-
-		if (Settings.MaxBitrate > 0)
-		{
-			TESTHR(CodecAPIHelper->SetCommonMaxBitRate(codecAPI, Settings.MaxBitrate * 1024));
-		}
-
-		if (Settings.AvgBitrate > 0)
-		{
-			TESTHR(CodecAPIHelper->SetCommonMeanBitRate(codecAPI, Settings.AvgBitrate * 1024));
-		}
-
-		if (Settings.Quality > 0)
-		{
-			TESTHR(CodecAPIHelper->SetCommonQuality(codecAPI, Settings.Quality));
-		}
-
-		TESTHR(CodecAPIHelper->SetLowLatencyMode(codecAPI, Settings.LowLatencyMode));
-		TESTHR(CodecAPIHelper->SetEncH264CABACEnable(codecAPI, Settings.CABAC));
-
-		if (Settings.QualityVsSpeed > 0)
-		{
-			TESTHR(CodecAPIHelper->SetCommonQualityVsSpeed(codecAPI, Settings.QualityVsSpeed));
-		}
-
-		if (Settings.QPUsed)
-		{
-			TESTHR(CodecAPIHelper->SetVideoEncodeFrameTypeQP(codecAPI, Settings.FrameTypeQP));
-			TESTHR(CodecAPIHelper->SetVideoEncodeQP(codecAPI, Settings.QP));
-			TESTHR(CodecAPIHelper->SetVideoMinQP(codecAPI, Settings.MinQP));
-			TESTHR(CodecAPIHelper->SetVideoMaxQP(codecAPI, Settings.MaxQP));
-		}
-
-		if (Settings.MPVGOPSize > 0)
-		{
-			TESTHR(CodecAPIHelper->SetEncMPVGOPSize(codecAPI, Settings.MPVGOPSize));
-		}
-
-		if (Settings.MaxNumRefFrame > 0)
-		{
-			TESTHR(CodecAPIHelper->SetVideoMaxNumRefFrame(codecAPI, Settings.MaxNumRefFrame));
-		}
-
-		if (Settings.DefaultBPictureCount > -1)
-		{
-			TESTHR(CodecAPIHelper->SetMPVDefaultBPictureCount(codecAPI, Settings.DefaultBPictureCount));
-		}
-
-		TESTHR(CodecAPIHelper->SetNumWorkerThreads(codecAPI, -1));
-
-		/*	CODECAPI_AVEncSliceControlMode : VT_UI4 0, default VT_UI4 2, minimal VT_UI4 2, maximal VT_UI4 2, step VT_UI4 0, modifiable
-		CODECAPI_AVEncSliceControlSize : VT_UI4 0, minimal VT_UI4 0, maximal VT_UI4 8160, step VT_UI4 1, modifiable
-		CODECAPI_AVEncVideoTemporalLayerCount : default VT_UI4 1, minimal VT_UI4 1, maximal VT_UI4 3, step VT_UI4 1, modifiable
-		CODECAPI_AVEncH264SPSID 
-		CODECAPI_AVEncVideoContentType*/
-	}
-
-	return hr;
-}
-
-
 bool MFMSH264Encoder::Init()
 {
 	HRESULT hr;
@@ -458,10 +390,12 @@ bool MFMSH264Encoder::Init()
 	OutputMediaType->SetUINT32(MF_MT_INTERLACE_MODE, Settings.InterlaceMode);
 	OutputMediaType->SetUINT32(MF_MT_MPEG2_PROFILE, Settings.H264Profile);
 	OutputMediaType->SetUINT32(MF_MT_MPEG2_LEVEL, Settings.H264Level);
+
+	//int bitrate = (int)(InputMediaTypeInfo.Width * InputMediaTypeInfo.Height * InputMediaTypeInfo.FrameRateNum * 1.0 * 0.07f);
 	OutputMediaType->SetUINT32(MF_MT_AVG_BITRATE, Settings.AvgBitrate * 1024);
 	OutputMediaType->SetUINT32(MF_MT_MAX_KEYFRAME_SPACING, Settings.MaxKeyFrameSpacing); //10
 
-	ApplySettings();
+	//ApplySettings();
 
 	hr = _encoder->SetOutputType(outStreams[0], OutputMediaType, 0);
 
@@ -501,7 +435,74 @@ bool MFMSH264Encoder::Init()
 	if (hr == S_OK)
 	{
 		Initiated = TRUE;
-	}
+	}	
 
 	return SUCCEEDED(hr);
+}
+
+HRESULT MFMSH264Encoder::ApplySettings()
+{
+	const HRESULT hr = _encoder->QueryInterface(IID_PPV_ARGS(&codecAPI)); 
+	if (hr == S_OK)
+	{
+		//TESTHR(CodecAPIHelper->SetAdaptiveMode(codecAPI, Settings.AdaptiveMode));
+
+		TESTHR(CodecAPIHelper->SetCommonRateControlMode(codecAPI, Settings.RateControlMode));
+
+		/*if (Settings.MaxBitrate > 0)
+		{
+			TESTHR(CodecAPIHelper->SetCommonMaxBitRate(codecAPI, Settings.MaxBitrate * 1024));
+		}*/
+
+		if (Settings.AvgBitrate > 0)
+		{
+			TESTHR(CodecAPIHelper->SetCommonMeanBitRate(codecAPI, Settings.AvgBitrate * 1024));
+		}
+		/*
+		if (Settings.Quality > 0)
+		{
+			TESTHR(CodecAPIHelper->SetCommonQuality(codecAPI, Settings.Quality));
+		}
+
+		TESTHR(CodecAPIHelper->SetLowLatencyMode(codecAPI, Settings.LowLatencyMode));
+		TESTHR(CodecAPIHelper->SetEncH264CABACEnable(codecAPI, Settings.CABAC));
+
+		if (Settings.QualityVsSpeed > 0)
+		{
+			TESTHR(CodecAPIHelper->SetCommonQualityVsSpeed(codecAPI, Settings.QualityVsSpeed));
+		}
+
+		if (Settings.QPUsed)
+		{
+			TESTHR(CodecAPIHelper->SetVideoEncodeFrameTypeQP(codecAPI, Settings.FrameTypeQP));
+			TESTHR(CodecAPIHelper->SetVideoEncodeQP(codecAPI, Settings.QP));
+			TESTHR(CodecAPIHelper->SetVideoMinQP(codecAPI, Settings.MinQP));
+			TESTHR(CodecAPIHelper->SetVideoMaxQP(codecAPI, Settings.MaxQP));
+		}*/
+
+		/*if (Settings.MPVGOPSize > 0)
+		{
+			TESTHR(CodecAPIHelper->SetEncMPVGOPSize(codecAPI, Settings.MPVGOPSize));
+		}
+
+		if (Settings.MaxNumRefFrame > 0)
+		{
+			TESTHR(CodecAPIHelper->SetVideoMaxNumRefFrame(codecAPI, Settings.MaxNumRefFrame));
+		}
+
+		if (Settings.DefaultBPictureCount > -1)
+		{
+			TESTHR(CodecAPIHelper->SetMPVDefaultBPictureCount(codecAPI, Settings.DefaultBPictureCount));
+		}*/
+
+		//TESTHR(CodecAPIHelper->SetNumWorkerThreads(codecAPI, -1));
+
+		/*	CODECAPI_AVEncSliceControlMode : VT_UI4 0, default VT_UI4 2, minimal VT_UI4 2, maximal VT_UI4 2, step VT_UI4 0, modifiable
+		CODECAPI_AVEncSliceControlSize : VT_UI4 0, minimal VT_UI4 0, maximal VT_UI4 8160, step VT_UI4 1, modifiable
+		CODECAPI_AVEncVideoTemporalLayerCount : default VT_UI4 1, minimal VT_UI4 1, maximal VT_UI4 3, step VT_UI4 1, modifiable
+		CODECAPI_AVEncH264SPSID
+		CODECAPI_AVEncVideoContentType*/
+	}
+
+	return hr;
 }

@@ -1,6 +1,7 @@
 #include "CodecAPIHelper.h"
 #include <codecapi.h>
 #include <corecrt_wstdio.h>
+#include <xlocmon>
 
 
 CodecAPIHelper::CodecAPIHelper(MFPipeline* pipeline)
@@ -14,23 +15,14 @@ CodecAPIHelper::~CodecAPIHelper()
 	Pipeline = nullptr;
 }
 
-HRESULT CodecAPIHelper::SetBOOL(ICodecAPI* api, GUID key, const BOOL value)
+HRESULT CodecAPIHelper::SetBOOL(ICodecAPI* api, GUID key, BOOL value)
 {
-	VARIANT var;
-	VariantInit(&var);
-	var.vt = VT_BOOL;
-
-	if (value)
-	{
-		var.boolVal = VARIANT_TRUE;
-	}
-	else
-	{		
-		var.boolVal = VARIANT_FALSE;
-	}
-
-	HRESULT hr = api->SetValue(&key, &var);
-	VariantClear(&var);
+	VARIANT v;
+	v.vt = VT_BOOL;
+	v.boolVal = value ? VARIANT_TRUE : VARIANT_FALSE;
+	
+	HRESULT hr = api->SetValue(&key, &v);
+	//VariantClear(&v);
 
 	return hr;
 }
@@ -43,7 +35,7 @@ HRESULT CodecAPIHelper::SetULONG(ICodecAPI* api, GUID key, const ULONG value)
 	var.ulVal = value;
 
 	HRESULT hr = api->SetValue(&key, &var);
-	VariantClear(&var); 
+	//VariantClear(&var); 
 
 	return hr;
 }
@@ -53,10 +45,10 @@ HRESULT CodecAPIHelper::SetQP(ICodecAPI* api, GUID key, H264QP &value, bool pack
 	VARIANT var;
 	VariantInit(&var);
 	var.vt = VT_UI8;
-	var.ulVal = value.Pack(pack);
+	var.ullVal = value.Pack(pack);
 
 	HRESULT hr = api->SetValue(&key, &var);
-	VariantClear(&var);
+	//VariantClear(&var);
 
 	return hr;	
 }
@@ -66,17 +58,17 @@ HRESULT CodecAPIHelper::SetULONGLONG(ICodecAPI* api, GUID key, ULONGLONG value)
 	VARIANT var;
 	VariantInit(&var);
 	var.vt = VT_UI8;
-	var.ulVal = value;
+	var.ullVal = value;
 
 	HRESULT hr = api->SetValue(&key, &var);
-	VariantClear(&var);
+	//VariantClear(&var);
 
 	return hr;
 }
 
 HRESULT CodecAPIHelper::SetMPVDefaultBPictureCount(ICodecAPI* api, ULONG value) const
 {
-	HRESULT hr = SetULONG(api, CODECAPI_AVEncMPVDefaultBPictureCount, value);
+	const HRESULT hr = SetULONG(api, CODECAPI_AVEncMPVDefaultBPictureCount, value);
 	if (hr != S_OK)
 	{
 		TraceE(L"Unable to set AVEncMPVDefaultBPictureCount.\n");
@@ -87,7 +79,7 @@ HRESULT CodecAPIHelper::SetMPVDefaultBPictureCount(ICodecAPI* api, ULONG value) 
 
 HRESULT CodecAPIHelper::SetAdaptiveMode(ICodecAPI* api, ULONG value) const
 {
-	HRESULT hr = SetULONG(api, CODECAPI_AVEncAdaptiveMode, value);
+	const HRESULT hr = SetULONG(api, CODECAPI_AVEncAdaptiveMode, value);
 	if (hr != S_OK)
 	{
 		TraceE(L"Unable to set AVEncAdaptiveMode.\n");
@@ -98,7 +90,7 @@ HRESULT CodecAPIHelper::SetAdaptiveMode(ICodecAPI* api, ULONG value) const
 
 HRESULT CodecAPIHelper::SetCommonRateControlMode(ICodecAPI* api, ULONG value) const
 {
-	HRESULT hr = SetULONG(api, CODECAPI_AVEncCommonRateControlMode, value);
+	const HRESULT hr = SetULONG(api, CODECAPI_AVEncCommonRateControlMode, value);
 	if (hr != S_OK)
 	{
 		TraceE(L"Unable to set AVEncCommonRateControlMode.\n");
@@ -109,7 +101,7 @@ HRESULT CodecAPIHelper::SetCommonRateControlMode(ICodecAPI* api, ULONG value) co
 
 HRESULT CodecAPIHelper::SetCommonMaxBitRate(ICodecAPI* api, ULONG value) const
 {
-	HRESULT hr = SetULONG(api, CODECAPI_AVEncCommonMaxBitRate, value);
+	const HRESULT hr = SetULONG(api, CODECAPI_AVEncCommonMaxBitRate, value);
 	if (hr != S_OK)
 	{
 		TraceE(L"Unable to set AVEncCommonMaxBitRate.\n");
@@ -120,7 +112,7 @@ HRESULT CodecAPIHelper::SetCommonMaxBitRate(ICodecAPI* api, ULONG value) const
 
 HRESULT CodecAPIHelper::SetCommonMeanBitRate(ICodecAPI* api, ULONG value) const
 {
-	HRESULT hr = SetULONG(api, CODECAPI_AVEncCommonMeanBitRate, value);
+	const HRESULT hr = SetULONG(api, CODECAPI_AVEncCommonMeanBitRate, value);
 	if (hr != S_OK)
 	{
 		TraceE(L"Unable to set AVEncCommonMeanBitRate.\n");
@@ -131,7 +123,7 @@ HRESULT CodecAPIHelper::SetCommonMeanBitRate(ICodecAPI* api, ULONG value) const
 
 HRESULT CodecAPIHelper::SetCommonQuality(ICodecAPI* api, ULONG value) const
 {
-	HRESULT hr = SetULONG(api, CODECAPI_AVEncCommonQuality, value);
+	const HRESULT hr = SetULONG(api, CODECAPI_AVEncCommonQuality, value);
 	if (hr != S_OK)
 	{
 		TraceE(L"Unable to set AVEncCommonQuality.\n");
@@ -142,7 +134,7 @@ HRESULT CodecAPIHelper::SetCommonQuality(ICodecAPI* api, ULONG value) const
 
 HRESULT CodecAPIHelper::SetLowLatencyMode(ICodecAPI* api, BOOL value) const
 {
-	HRESULT hr = SetBOOL(api, CODECAPI_AVLowLatencyMode, value);
+	const HRESULT hr = SetBOOL(api, CODECAPI_AVLowLatencyMode, value);
 	if (hr != S_OK)
 	{
 		TraceE(L"Unable to set AVLowLatencyMode.\n");
@@ -153,7 +145,7 @@ HRESULT CodecAPIHelper::SetLowLatencyMode(ICodecAPI* api, BOOL value) const
 
 HRESULT CodecAPIHelper::SetEncH264CABACEnable(ICodecAPI* api, BOOL value) const
 {
-	HRESULT hr = SetBOOL(api, CODECAPI_AVEncH264CABACEnable, value);
+	const HRESULT hr = SetBOOL(api, CODECAPI_AVEncH264CABACEnable, value);
 	if (hr != S_OK)
 	{
 		TraceE(L"Unable to set AVEncH264CABACEnable.\n");
@@ -164,7 +156,7 @@ HRESULT CodecAPIHelper::SetEncH264CABACEnable(ICodecAPI* api, BOOL value) const
 
 HRESULT CodecAPIHelper::SetCommonQualityVsSpeed(ICodecAPI* api, ULONG value) const
 {
-	HRESULT hr = SetULONG(api, CODECAPI_AVEncCommonQualityVsSpeed, value);
+	const HRESULT hr = SetULONG(api, CODECAPI_AVEncCommonQualityVsSpeed, value);
 	if (hr != S_OK)
 	{
 		TraceE(L"Unable to set AVEncCommonQualityVsSpeed.\n");
