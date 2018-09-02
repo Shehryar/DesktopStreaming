@@ -92,7 +92,7 @@
       <TargetMachine>MachineX86</TargetMachine>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;Strmiids.lib;libavutil.a;libswscale.a;libavfilter.a;mfplat.lib;mf.lib;mfreadwrite.lib;mfuuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;Winmm.lib;Avrt.lib;Strmiids.lib;libavutil.a;libswscale.a;libavfilter.a;mfplat.lib;mf.lib;mfreadwrite.lib;mfuuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableDpiAwareness>true</EnableDpiAwareness>
@@ -159,6 +159,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="AudioLoopbackSource.cpp" />
     <ClCompile Include="CodecAPIHelper.cpp" />
     <ClCompile Include="DesktopDuplication.cpp">
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -171,6 +172,7 @@
     <ClCompile Include="MFCodecList.cpp" />
     <ClCompile Include="MFColorConverter.cpp" />
     <ClCompile Include="MFFilter.cpp" />
+    <ClCompile Include="MFMSAACEncoder.cpp" />
     <ClCompile Include="MFMSH264Encoder.cpp" />
     <ClCompile Include="MFMuxAsync.cpp" />
     <ClCompile Include="MFNVENCH264Encoder.cpp" />
@@ -183,6 +185,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\..\Program Files (x86)\Windows Kits\10\Include\10.0.16299.0\um\wmcodecdsp.h" />
+    <ClInclude Include="AudioLoopbackSource.h" />
     <ClInclude Include="CodecAPIHelper.h" />
     <ClInclude Include="CommonTypes.h" />
     <ClInclude Include="DisplayManager.h" />
@@ -190,6 +193,7 @@
     <ClInclude Include="MFCodecList.h" />
     <ClInclude Include="MFColorConverter.h" />
     <ClInclude Include="MFFilter.h" />
+    <ClInclude Include="MFMSAACEncoder.h" />
     <ClInclude Include="MFMSH264Encoder.h" />
     <ClInclude Include="MFMuxAsync.h" />
     <ClInclude Include="MFNVENCH264Encoder.h" />
