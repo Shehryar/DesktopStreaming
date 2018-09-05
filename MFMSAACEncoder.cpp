@@ -11,11 +11,11 @@
 MFMSAACEncoder::MFMSAACEncoder(MFPipeline* pipeline, VFAudioMediaType audioFormat, int bitrate)
 	: MFFilter(pipeline)
 {
-	this->encodeThread = NULL;
-	this->pEncoder = NULL;
-	this->pInType = NULL;
-	this->OutputMediaType = NULL;
-	this->pEvGenerator = NULL;
+	this->encodeThread = nullptr;
+	this->pEncoder = nullptr;
+	this->pInType = nullptr;
+	this->OutputMediaType = nullptr;
+	this->pEvGenerator = nullptr;
 	
 	this->AudioFormat = audioFormat;
 	this->bitrate = bitrate;
@@ -37,7 +37,7 @@ MFMSAACEncoder::~MFMSAACEncoder()
 int MFMSAACEncoder::Init()
 {	
 	CComPtr<IUnknown> spXferUnk;
-	HRESULT hr = CoCreateInstance(CLSID_AACMFTEncoder, NULL, CLSCTX_INPROC_SERVER, IID_IUnknown, (void**)&spXferUnk);
+	HRESULT hr = CoCreateInstance(CLSID_AACMFTEncoder, nullptr, CLSCTX_INPROC_SERVER, IID_IUnknown, (void**)&spXferUnk);
 
 	if (SUCCEEDED(hr))
 	{
@@ -46,7 +46,7 @@ int MFMSAACEncoder::Init()
 
 	if (FAILED(hr))
 	{
-		pEncoder = NULL;
+		pEncoder = nullptr;
 
 		TraceE(L"AAC Encoder: Unable to create.");
 		return false;
@@ -122,7 +122,7 @@ int MFMSAACEncoder::Init()
 		SafeRelease(&pInType);
 	}
 
-	if (pInType == NULL)
+	if (pInType == nullptr)
 	{
 		TraceE(L"Audio Encoder: Failed to get input type");
 		return false;
@@ -189,34 +189,33 @@ void MFMSAACEncoder::Join() const
 
 void MFMSAACEncoder::ProcessData()
 {
-	HRESULT hr;
-
 	Finished = FALSE;
 
 	pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
 	pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
 
 	while (!(StopFlag && Pipeline->audioCapBuffer->empty()))
-	{	
-		
-		IMFSample* pSample = NULL;
+	{			
+		IMFSample* pSample = nullptr;
 		pSample = Pipeline->audioCapBuffer->pop();
-		if (pSample == NULL)
+		if (pSample == nullptr)
 		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(3));
 			continue;
 		}
 
 		LONGLONG llTimeStamp = 0;
-		hr = pSample->GetSampleTime(&llTimeStamp);
+		HRESULT hr = pSample->GetSampleTime(&llTimeStamp);
 		if (_firstSample)
 		{
 			_baseTime = llTimeStamp;
 			_firstSample = FALSE;
-		}
+		}		
 
 		// rebase the time stamp
 		llTimeStamp -= _baseTime;
+				
+		//TraceE(L"AAC Encoder: Audio sample timestamp is %lld\n", llTimeStamp);
 
 		hr = pSample->SetSampleTime(llTimeStamp);
 
@@ -260,8 +259,8 @@ void MFMSAACEncoder::ProcessData()
 
 			outDataBuffer.dwStatus = 0;
 			outDataBuffer.dwStreamID = 0;
-			outDataBuffer.pEvents = NULL;
-			outDataBuffer.pSample = NULL;
+			outDataBuffer.pEvents = nullptr;
+			outDataBuffer.pSample = nullptr;
 
 			pEncoder->GetOutputStreamInfo(0, &info);
 
@@ -323,4 +322,66 @@ void MFMSAACEncoder::ProcessData()
 	}
 
 	Finished = TRUE;
+}
+
+
+IMFSample* MFMSAACEncoder::PCMToMFSample(RAWAudioFrame* frame)
+{
+	if (frame == nullptr)
+	{
+		return nullptr;
+	}
+
+	IMFSample *newSample = nullptr;
+	IMFMediaBuffer *newBuffer = nullptr;
+
+	const DWORD cbBuffer = frame->BufferSize;
+
+	BYTE *pData = nullptr;
+
+	// Create a new memory buffer.
+	HRESULT hr = MFCreateMemoryBuffer(cbBuffer, &newBuffer);
+
+	// Lock the buffer and copy the video frame to the buffer.
+	if (SUCCEEDED(hr))
+	{
+		hr = newBuffer->Lock(&pData, nullptr, nullptr);
+	}
+
+	memcpy(pData, frame->Buffer, frame->BufferSize);
+
+	if (newBuffer)
+	{
+		newBuffer->Unlock();
+	}
+
+	// Set the data length of the buffer.
+	if (SUCCEEDED(hr))
+	{
+		hr = newBuffer->SetCurrentLength(cbBuffer);
+	}
+
+	// Create a media sample and add the buffer to the sample.
+	if (SUCCEEDED(hr))
+	{
+		hr = MFCreateSample(&newSample);
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = newSample->AddBuffer(newBuffer);
+	}
+
+	// Set the time stamp and the duration.
+	if (SUCCEEDED(hr))
+	{
+		hr = newSample->SetSampleTime(frame->Timestamp);
+	}
+	if (SUCCEEDED(hr))
+	{
+		hr = newSample->SetSampleDuration(frame->Duration);
+	}
+
+	SafeRelease(&newBuffer);
+
+	return newSample;
 }

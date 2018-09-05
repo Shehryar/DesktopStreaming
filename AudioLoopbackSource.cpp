@@ -1,26 +1,26 @@
 #include "AudioLoopbackSource.h"
 
-#include <windows.h>
+#include <Windows.h>
 
 #include <mmsystem.h>
 #include <mmdeviceapi.h>
-#include <audioclient.h>
-#include <stdio.h>
+#include <Audioclient.h>
+#include <cstdio>
 #include <avrt.h>
-#include "assert.h"
-#include <memory.h>
+#include <cassert>
 #include "VFDebug.h"
+#include "MFMSAACEncoder.h"
+#include "WAVWriter.h"
 
-//HRESULT open_file(LPCWSTR szFileName, HMMIO *phFile);
+#define DEBUG_WAV_OUTPUT 0
 
 HRESULT get_default_device(IMMDevice **ppMMDevice);
-void outputStats();
 
 IAudioCaptureClient *pAudioCaptureClient;
 IAudioClient *pAudioClient;
 HANDLE hTask;
-bool bDiscontinuityDetected; // init'd eleswhere
-bool bVeryFirstPacket; // init'd elsewhere
+bool bDiscontinuityDetected; 
+bool bVeryFirstPacket; 
 IMMDevice *m_pMMDevice;
 UINT32 nBlockAlign;
 UINT32 pnFrames;
@@ -29,87 +29,92 @@ CRITICAL_SECTION csMyLock;  // shared critical section. Starts not locked...
 
 int shouldStop = true;
 
-BYTE pBufLocal[1024 * 1024]; // 1MB is quite awhile I think...
+BYTE pBufLocal[1024 * 1024]; // 1MB is quite awhile 
 long pBufOriginalSize = 1024 * 1024;
-//long pBufLocalSize = 1024*1024; // used for buffer size negotiation method, use expectedmaxbuffersize instead
+
 long pBufLocalCurrentEndLocation = 0;
 
-long expectedMaxBufferSize = 1024 * 1024; // TODO make non-global
+long expectedMaxBufferSize = 1024 * 1024; 
 
 HANDLE m_hThread;
 
 static DWORD WINAPI propagateBufferForever(LPVOID pv);
 
-extern CRITICAL_SECTION gSharedState;
-
+CRITICAL_SECTION gSharedState;
 
 #define EXIT_ON_ERROR(hres)  \
               if (FAILED(hres)) { return hres; }
 #define REFTIMES_PER_SEC  10000000
-
 
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
 const IID IID_IAudioClient = __uuidof(IAudioClient);
 const IID IID_IAudioRenderClient = __uuidof(IAudioRenderClient);
 
-
-HRESULT get_default_device(IMMDevice **ppMMDevice) {
-	HRESULT hr = S_OK;
+HRESULT get_default_device(IMMDevice **ppMMDevice)
+{
 	IMMDeviceEnumerator *pMMDeviceEnumerator;
 	// activate a device enumerator
-	hr = CoCreateInstance(
-		__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
+	HRESULT hr = CoCreateInstance(
+		__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
 		__uuidof(IMMDeviceEnumerator),
 		(void**)&pMMDeviceEnumerator
 	);
-	if (FAILED(hr)) {
-		printf("CoCreateInstance(IMMDeviceEnumerator) failed: hr = 0x%08x\n", hr);
+
+	if (FAILED(hr)) 
+	{
+		printf("CoCreateInstance(IMMDeviceEnumerator) failed: hr = 0x%08lx\n", hr);
 		return hr;
 	}
 
 	// get the default render endpoint
 	hr = pMMDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, ppMMDevice);
 	pMMDeviceEnumerator->Release();
-	if (FAILED(hr)) {
-		printf("IMMDeviceEnumerator::GetDefaultAudioEndpoint failed: hr = 0x%08x\n", hr);
+	if (FAILED(hr))
+	{
+		printf("IMMDeviceEnumerator::GetDefaultAudioEndpoint failed: hr = 0x%08lx\n", hr);
 		return hr;
 	}
 
 	return S_OK;
 }
 
-
-void propagateWithRawCurrentFormat(WAVEFORMATEX *toThis) {
+void propagateWithRawCurrentFormat(WAVEFORMATEX *toThis) 
+{
 	WAVEFORMATEX *pwfx;
 	IMMDevice *pMMDevice;
 	IAudioClient *pAudioClient;
-	HANDLE hTask;
 	DWORD nTaskIndex = 0;
-	hTask = AvSetMmThreadCharacteristics(L"Capture", &nTaskIndex);
+	const HANDLE hTask = AvSetMmThreadCharacteristics(L"Capture", &nTaskIndex);
 
 	HRESULT hr = get_default_device(&pMMDevice);
-	if (FAILED(hr)) {
+	if (FAILED(hr))
+	{
 		assert(false);
 	}
+
 	// activate an (the default, for us, since we want loopback) IAudioClient
 	hr = pMMDevice->Activate(
 		__uuidof(IAudioClient),
-		CLSCTX_ALL, NULL,
+		CLSCTX_ALL, nullptr,
 		(void**)&pAudioClient
 	);
-	if (FAILED(hr)) {
+
+	if (FAILED(hr))
+	{
 		XTraceE(L"IMMDevice::Activate(IAudioClient) failed: hr = 0x%08x", hr);
 		assert(false);
 	}
 
 	hr = pAudioClient->GetMixFormat(&pwfx);
-	if (FAILED(hr)) {
+	if (FAILED(hr))
+	{
 		XTraceE(L"IAudioClient::GetMixFormat failed: hr = 0x%08x\n", hr);
 		CoTaskMemFree(pwfx);
 		pAudioClient->Release();
 		assert(false);
 	}
+
 	pAudioClient->Stop();
 	AvRevertMmThreadCharacteristics(hTask);
 	pAudioClient->Release();
@@ -118,27 +123,17 @@ void propagateWithRawCurrentFormat(WAVEFORMATEX *toThis) {
 	CoTaskMemFree(pwfx);
 }
 
-int getHtzRate() {
-	WAVEFORMATEX format;
-	propagateWithRawCurrentFormat(&format);
-	return format.nSamplesPerSec;
-}
-/*
-int getBitsPerSample() {
-	WAVEFORMATEX format;
-	propagateWithRawCurrentFormat(&format);
-	return format.wBitsPerSample;
-}
-*/
-int getChannels() {
-	WAVEFORMATEX format;
-	propagateWithRawCurrentFormat(&format);
-	return format.nChannels;
-}
+#if DEBUG_WAV_OUTPUT
+	WAVWriter* wavWriter = nullptr;
+#endif
 
 // we only call this once...per hit of the play button :)
-HRESULT LoopbackCaptureSetup()
+HRESULT LoopbackCaptureSetup(int* channels, int* bps, int* sampleRate, int* bufferSize, int* blockAlign)
 {
+#if DEBUG_WAV_OUTPUT
+	wavWriter = new WAVWriter(L"c:\\vf\\output_test.wav");
+#endif
+
 	// Initialize the critical section one time only.
 	if (!InitializeCriticalSectionAndSpinCount(&csMyLock, 0x00000400))
 		return E_FAIL;
@@ -149,10 +144,9 @@ HRESULT LoopbackCaptureSetup()
 	assert(shouldStop); // double start would be odd...
 	shouldStop = false; // allow graphs to restart, if they so desire...
 	pnFrames = 0;
-	bool bInt16 = true; // makes it actually work, for some reason...my guess is it's a more common format
+	const bool bInt16 = true; // makes it actually work, for some reason...my guess is it's a more common format
 
-	HRESULT hr;
-	hr = get_default_device(&m_pMMDevice); // so it can re-place our pointer...
+	HRESULT hr = get_default_device(&m_pMMDevice); // so it can re-place our pointer...
 	if (FAILED(hr)) {
 		return hr;
 	}
@@ -163,7 +157,7 @@ HRESULT LoopbackCaptureSetup()
 	// activate an (the default, for us, since we want loopback) IAudioClient
 	hr = m_pMMDevice->Activate(
 		__uuidof(IAudioClient),
-		CLSCTX_ALL, NULL,
+		CLSCTX_ALL, nullptr,
 		(void**)&pAudioClient
 	);
 	if (FAILED(hr)) {
@@ -173,7 +167,7 @@ HRESULT LoopbackCaptureSetup()
 
 	// get the default device periodicity, why? I don't know...
 	REFERENCE_TIME hnsDefaultDevicePeriod;
-	hr = pAudioClient->GetDevicePeriod(&hnsDefaultDevicePeriod, NULL);
+	hr = pAudioClient->GetDevicePeriod(&hnsDefaultDevicePeriod, nullptr);
 	if (FAILED(hr)) {
 		XTraceE(L"IAudioClient::GetDevicePeriod failed: hr = 0x%08x\n", hr);
 		pAudioClient->Release();
@@ -191,7 +185,7 @@ HRESULT LoopbackCaptureSetup()
 		return hr;
 	}
 
-	if (true /*bInt16*/) {
+	if (bInt16) {
 		// coerce int-XX wave format (like int-16 or int-32)
 		// can do this in-place since we're not changing the size of the format
 		// also, the engine will auto-convert from float to int for us
@@ -237,29 +231,29 @@ HRESULT LoopbackCaptureSetup()
 		}
 	}
 
-	MMCKINFO ckRIFF = { 0 };
-	MMCKINFO ckData = { 0 };
+	*channels = pwfx->nChannels;
+	*sampleRate = pwfx->nSamplesPerSec;
+	*bps = 16;
+	*blockAlign = pwfx->nBlockAlign;
+
+#if DEBUG_WAV_OUTPUT
+	wavWriter->OpenFile();
+	wavWriter->WriteHeader(*sampleRate, *channels);
+#endif
 
 	nBlockAlign = pwfx->nBlockAlign;
 
+	IMMDeviceEnumerator *pEnumerator = nullptr;
+	IMMDevice *pDevice = nullptr;
 
-	// avoid stuttering on close when using loopback
-	// http://social.msdn.microsoft.com/forums/en-US/windowspro-audiodevelopment/thread/c7ba0a04-46ce-43ff-ad15-ce8932c00171/ 
-
-	//IAudioClient *pAudioClient = NULL;
-	//IAudioCaptureClient *pCaptureClient = NULL;
-
-	IMMDeviceEnumerator *pEnumerator = NULL;
-	IMMDevice *pDevice = NULL;
-
-	IAudioRenderClient *pRenderClient = NULL;
-	WAVEFORMATEXTENSIBLE *captureDataFormat = NULL;
+	IAudioRenderClient *pRenderClient = nullptr;
+	WAVEFORMATEXTENSIBLE *captureDataFormat = nullptr;
 	BYTE *captureData;
 
 	REFERENCE_TIME hnsRequestedDuration = REFTIMES_PER_SEC;
 
 	hr = CoCreateInstance(
-		CLSID_MMDeviceEnumerator, NULL,
+		CLSID_MMDeviceEnumerator, nullptr,
 		CLSCTX_ALL, IID_IMMDeviceEnumerator,
 		(void**)&pEnumerator);
 	EXIT_ON_ERROR(hr)
@@ -267,13 +261,12 @@ HRESULT LoopbackCaptureSetup()
 		hr = get_default_device(&pDevice);
 	EXIT_ON_ERROR(hr)
 
-		hr = pDevice->Activate(IID_IAudioClient, CLSCTX_ALL, NULL, (void**)&pAudioClient);
+		hr = pDevice->Activate(IID_IAudioClient, CLSCTX_ALL, nullptr, (void**)&pAudioClient);
 	EXIT_ON_ERROR(hr)
 
 		hr = pAudioClient->GetMixFormat((WAVEFORMATEX **)&captureDataFormat);
 	EXIT_ON_ERROR(hr)
-
-
+		
 		// Silence: initialise in sharedmode [this is the "silence" bug overwriter, so buffer doesn't matter as much...]
 		hr = pAudioClient->Initialize(
 			AUDCLNT_SHAREMODE_SHARED,
@@ -281,7 +274,7 @@ HRESULT LoopbackCaptureSetup()
 			REFTIMES_PER_SEC, // buffer size a full 1.0s, though prolly doesn't matter here.
 			0,
 			pwfx,
-			NULL);
+			nullptr);
 	EXIT_ON_ERROR(hr)
 
 		// get the frame count
@@ -289,8 +282,10 @@ HRESULT LoopbackCaptureSetup()
 	hr = pAudioClient->GetBufferSize(&bufferFrameCount);
 	EXIT_ON_ERROR(hr)
 
-		// create a render client
-		hr = pAudioClient->GetService(IID_IAudioRenderClient, (void**)&pRenderClient);
+		*bufferSize = bufferFrameCount;
+
+	// create a render client
+	hr = pAudioClient->GetService(IID_IAudioRenderClient, (void**)&pRenderClient);
 	EXIT_ON_ERROR(hr)
 
 		// get the buffer
@@ -307,7 +302,7 @@ HRESULT LoopbackCaptureSetup()
 
 
 		// create a new IAudioClient
-		hr = pDevice->Activate(IID_IAudioClient, CLSCTX_ALL, NULL, (void**)&pAudioClient);
+		hr = pDevice->Activate(IID_IAudioClient, CLSCTX_ALL, nullptr, (void**)&pAudioClient);
 	EXIT_ON_ERROR(hr)
 
 		// -============================ now the sniffing code initialization stuff, direct from mauritius... ===================================
@@ -322,13 +317,17 @@ HRESULT LoopbackCaptureSetup()
 			AUDCLNT_SHAREMODE_SHARED,
 			AUDCLNT_STREAMFLAGS_LOOPBACK,
 			REFTIMES_PER_SEC, // buffer size a full 1.0s, seems ok VLC
-			0, pwfx, 0
+			0, 
+			pwfx, 
+			nullptr
 		);
+
 	if (FAILED(hr)) {
 		XTraceE(L"IAudioClient::Initialize failed: hr = 0x%08x\n", hr);
 		pAudioClient->Release();
 		return hr;
 	}
+
 	CoTaskMemFree(pwfx);
 
 	// activate an IAudioCaptureClient
@@ -347,8 +346,8 @@ HRESULT LoopbackCaptureSetup()
 	DWORD nTaskIndex = 0;
 
 	hTask = AvSetMmThreadCharacteristics(L"Capture", &nTaskIndex);
-	if (NULL == hTask) {
-		DWORD dwErr = GetLastError();
+	if (nullptr == hTask) {
+		const DWORD dwErr = GetLastError();
 		XTraceE(L"AvSetMmThreadCharacteristics failed: last error = %u\n", dwErr);
 		pAudioCaptureClient->Release();
 		pAudioClient->Release();
@@ -369,17 +368,26 @@ HRESULT LoopbackCaptureSetup()
 	bDiscontinuityDetected = true;
 	bVeryFirstPacket = true;
 
+	return hr;	
+}
+
+HRESULT LoopbackCaptureStart(MFPipeline* pipeline)
+{
+	HRESULT hr = S_OK;
+
 	// start the forever grabbing thread...
 	DWORD dwThreadID;
-	m_hThread = CreateThread(NULL,
+	m_hThread = CreateThread(
+		nullptr,
 		0,
 		propagateBufferForever,
-		0,
+		pipeline,
 		0,
 		&dwThreadID);
+
 	if (!m_hThread)
 	{
-		DWORD dwErr = GetLastError();
+		const DWORD dwErr = GetLastError();
 		return HRESULT_FROM_WIN32(dwErr);
 	}
 	else {
@@ -392,24 +400,21 @@ HRESULT LoopbackCaptureSetup()
 	}
 
 	return hr;
-} // end LoopbackCaptureSetup
+}
 
-
-HRESULT propagateBufferOnce();
+HRESULT propagateBufferOnce(MFPipeline* pipeline);
 
 int totalSuccessFullyread = 0;
 int totalBlips = 0;
 int totalOverflows = 0;
 
-HRESULT propagateBufferOnce() {
-	HRESULT hr = S_OK;
-
-	// grab next audio chunk...
-	int gotAnyAtAll = FALSE;
+HRESULT propagateBufferOnce(MFPipeline* pipeline) 
+{
 	DWORD start_time = timeGetTime();
+
 	while (!shouldStop) {
 		UINT32 nNextPacketSize;
-		hr = pAudioCaptureClient->GetNextPacketSize(&nNextPacketSize); // get next packet, if one is ready...
+		HRESULT hr = pAudioCaptureClient->GetNextPacketSize(&nNextPacketSize); // get next packet, if one is ready...
 		if (FAILED(hr)) {
 			XTraceE(L"IAudioCaptureClient::GetNextPacketSize failed after %u frames: hr = 0x%08x\n", pnFrames, hr);
 			pAudioClient->Stop();
@@ -419,7 +424,8 @@ HRESULT propagateBufferOnce() {
 			return hr;
 		}
 
-		if (0 == nNextPacketSize) {
+		if (0 == nNextPacketSize)
+		{
 			// (CA) - this condition appears on Win8 when there is "silence" in the audio stream 
 			// (CA) - we don't appear to hit this condition in Win7 .. so I have eliminated the logic in here for right now...
 
@@ -445,8 +451,9 @@ HRESULT propagateBufferOnce() {
 			Sleep(1);
 			continue;
 		}
-		else {
-			gotAnyAtAll = TRUE;
+		else
+		{
+			int gotAnyAtAll = TRUE;
 			totalSuccessFullyread++;
 		}
 
@@ -461,12 +468,12 @@ HRESULT propagateBufferOnce() {
 			&pData,
 			&nNumFramesToRead,
 			&dwFlags,
-			NULL,
-			NULL
+			nullptr,
+			nullptr
 		); // ACTUALLY GET THE BUFFER which I assume it reads in the format of the fella we passed in
-
-
-		if (FAILED(hr)) {
+		
+		if (FAILED(hr)) 
+		{
 			XTraceE(L"IAudioCaptureClient::GetBuffer failed after %u frames: hr = 0x%08x\n", pnFrames, hr);
 			pAudioClient->Stop();
 			AvRevertMmThreadCharacteristics(hTask);
@@ -480,11 +487,13 @@ HRESULT propagateBufferOnce() {
 
 			//CAutoLock cAutoLockShared(&);  // for the booleans, we lock csMyLock later :| XXXX weird?
 
-			if (dwFlags == 0) {
+			if (dwFlags == 0) 
+			{
 				// the good case, got audio packet
 				// we'll let fillbuffer set bDiscontinuityDetected = false; since it uses it to know if the next packet should restart, etc.
 			}
-			else if (bDiscontinuityDetected && AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY == dwFlags) {
+			else if (bDiscontinuityDetected && AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY == dwFlags)
+			{
 				XTraceE(L"Probably spurious glitch reported on first packet, or two discontinuity errors occurred before it read from the cached buffer\n");
 
 				bDiscontinuityDetected = true; // won't hurt, even if it is a real first packet :)
@@ -495,7 +504,8 @@ HRESULT propagateBufferOnce() {
 				// but it won't be too far wrong, compared to what it would otherwise be with always
 				// assigning it the current graph timestamp, like we used to...
 			}
-			else if (AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY == dwFlags) {
+			else if (AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY == dwFlags)
+			{
 				XTraceE(L"IAudioCaptureClient::discontinuity GetBuffer set flags to 0x%08x after %u frames\n", dwFlags, pnFrames);
 				// expected your CPU gets behind or what not. I guess.
 				/*pAudioClient->Stop();
@@ -506,12 +516,14 @@ HRESULT propagateBufferOnce() {
 
 				bDiscontinuityDetected = true;
 			}
-			else if (AUDCLNT_BUFFERFLAGS_SILENT == dwFlags) {
+			else if (AUDCLNT_BUFFERFLAGS_SILENT == dwFlags)
+			{
 				// ShowOutput("IAudioCaptureClient::silence (just) from GetBuffer after %u frames\n", pnFrames);
 				// expected if there's silence (i.e. nothing playing), since we now include the "silence generator" work-around...
 				// at least in windows 7, we get here...
 			}
-			else {
+			else 
+			{
 				// probably silence + discontinuity
 				XTraceE(L"IAudioCaptureClient::unknown discontinuity GetBuffer set flags to 0x%08x after %u frames\n", dwFlags, pnFrames);
 				bDiscontinuityDetected = true; // probably is some type of discontinuity :P
@@ -520,7 +532,8 @@ HRESULT propagateBufferOnce() {
 			if (bDiscontinuityDetected)
 				totalBlips++;
 
-			if (0 == nNumFramesToRead) {
+			if (0 == nNumFramesToRead)
+			{
 				// we should probably never get here, right?
 				  // my guess is that we don't, even in win8?
 				  // I mean, this is probably really messed up it told us it had some data to grab, we try to grab it, it returns us nothing?
@@ -537,11 +550,12 @@ HRESULT propagateBufferOnce() {
 			pnFrames += nNumFramesToRead; // increment total count...		
 
 			// lBytesToWrite typically 1792 bytes...
-			LONG lBytesToWrite = nNumFramesToRead * nBlockAlign; // nBlockAlign is "audio block size" or frame size, for one audio segment...
+			const LONG lBytesToWrite = nNumFramesToRead * nBlockAlign; // nBlockAlign is "audio block size" or frame size, for one audio segment...
 			{
 				EnterCriticalSection(&csMyLock); // Lock the critical section, releases scope after block is over...
 
-				if (pBufLocalCurrentEndLocation > expectedMaxBufferSize) {
+				if (pBufLocalCurrentEndLocation > expectedMaxBufferSize) 
+				{
 					// this happens during VLC pauses...
 					// I have no idea what I'm doing here... this doesn't fix it, but helps a bit... TODO FINISH THIS
 					// it seems like if you're just straight recording then you want this big...otherwise you want it like size 0 and non-threaded [pausing with graphedit, for example]... [?]
@@ -554,9 +568,38 @@ HRESULT propagateBufferOnce() {
 					bDiscontinuityDetected = true;
 				}
 
-				for (INT i = 0; i < lBytesToWrite && pBufLocalCurrentEndLocation < expectedMaxBufferSize; i++) {
+				for (INT i = 0; i < lBytesToWrite && pBufLocalCurrentEndLocation < expectedMaxBufferSize; i++) 
+				{
 					pBufLocal[pBufLocalCurrentEndLocation++] = pData[i];
 				}
+
+#if DEBUG_WAV_OUTPUT
+				if (wavWriter)
+				{
+					wavWriter->WriteChunk((short*)pBufLocal, pBufLocalCurrentEndLocation);
+				}
+#endif
+
+				if (pipeline->audenc)
+				{
+					const auto frame = new RAWAudioFrame();
+					frame->BufferSize = pBufLocalCurrentEndLocation;
+					frame->Buffer = (BYTE*)malloc(frame->BufferSize);
+
+					auto* encoder = (MFMSAACEncoder*)pipeline->audenc;
+					frame->Duration = (((int64_t)frame->BufferSize * 10000 * 1000) / ((encoder->AudioFormat.BPS / 8) * encoder->AudioFormat.Channels * encoder->AudioFormat.SampleRate));
+					frame->Timestamp = pipeline->lastAudioTS;
+					pipeline->lastAudioTS += frame->Duration;
+
+					XTraceE(L"Audio source: sample timestamp is %lld\n", pipeline->lastAudioTS);
+
+					memcpy(frame->Buffer, pBufLocal, frame->BufferSize);
+
+					IMFSample* sample = MFMSAACEncoder::PCMToMFSample(frame);
+					pipeline->audioCapBuffer->push(sample);
+				}
+
+				pBufLocalCurrentEndLocation = 0;
 
 				LeaveCriticalSection(&csMyLock);
 			}
@@ -565,7 +608,8 @@ HRESULT propagateBufferOnce() {
 		}
 
 		hr = pAudioCaptureClient->ReleaseBuffer(nNumFramesToRead);
-		if (FAILED(hr)) {
+		if (FAILED(hr))
+		{
 			XTraceE(L"IAudioCaptureClient::ReleaseBuffer failed after %u frames: hr = 0x%08x\n", pnFrames, hr);
 			pAudioClient->Stop();
 			AvRevertMmThreadCharacteristics(hTask);
@@ -578,7 +622,6 @@ HRESULT propagateBufferOnce() {
 	} // while !got anything && should continue loop
 
 	return S_OK; // stop was called...
-
 }
 
 // iSize is max size of the BYTE buffer...so maybe...we should just drop it if we have past that size? hmm...we're probably
@@ -587,11 +630,11 @@ HRESULT LoopbackCaptureTakeFromBuffer(BYTE pBuf[], int iSize, WAVEFORMATEX* ifNo
 	while (!shouldStop) { // allow this to exit, too, at shutdown, possibly a few times we kind of got stuck in here, waiting for more data, but it was shutdown so not receiving any more data :|
 		{
 			EnterCriticalSection(&csMyLock);
-			
+
 			if (pBufLocalCurrentEndLocation > 0) {
 				// fails lodo is that ok though? 
 				// assert(pBufLocalCurrentEndLocation <= expectedMaxBufferSize);
-				int totalToWrite = MIN(pBufLocalCurrentEndLocation, expectedMaxBufferSize);
+				const int totalToWrite = MIN(pBufLocalCurrentEndLocation, expectedMaxBufferSize);
 				//ASSERT(totalToWrite <= iSize); // just in case...just in case almost...
 				memcpy(pBuf, pBufLocal, totalToWrite);
 				*totalBytesWrote = totalToWrite;
@@ -609,26 +652,14 @@ HRESULT LoopbackCaptureTakeFromBuffer(BYTE pBuf[], int iSize, WAVEFORMATEX* ifNo
 	return E_FAIL; // we didn't fill anything...and are shutting down...
 }
 
-void LoopbackCaptureClear() {
-	EnterCriticalSection(&csMyLock); // Lock the critical section, releases scope after block is done...
-
-	pBufLocalCurrentEndLocation = 0;
-	bDiscontinuityDetected = 1; // it uses this for timestamping the next packet
-
-	LeaveCriticalSection(&csMyLock);
-
-	// Release resources used by the critical section object.
-	DeleteCriticalSection(&csMyLock);
-	DeleteCriticalSection(&gSharedState);	
-}
-
 // clean up
-void loopBackRelease() {
+void loopBackRelease()
+{
 	// tell running collector thread to end...
 	shouldStop = 1;
 	WaitForSingleObject(m_hThread, INFINITE);
 	CloseHandle(m_hThread);
-	m_hThread = NULL;
+	m_hThread = nullptr;
 	pAudioClient->Stop();
 	AvRevertMmThreadCharacteristics(hTask);
 	pAudioCaptureClient->Release();
@@ -638,13 +669,45 @@ void loopBackRelease() {
 	pBufLocalCurrentEndLocation = 0;
 }
 
+void LoopbackCaptureClear() 
+{
+	loopBackRelease();
+
+	EnterCriticalSection(&csMyLock); // Lock the critical section, releases scope after block is done...
+
+	pBufLocalCurrentEndLocation = 0;
+	bDiscontinuityDetected = 1; // it uses this for timestamping the next packet
+
+	LeaveCriticalSection(&csMyLock);
+
+	// Release resources used by the critical section object.
+	DeleteCriticalSection(&csMyLock);
+	DeleteCriticalSection(&gSharedState);
+
+#if DEBUG_WAV_OUTPUT
+	if (wavWriter)
+	{
+		wavWriter->CloseFile();
+
+		delete wavWriter;
+		wavWriter = nullptr;
+	}
+#endif
+}
+
 // called via reflection :)
-static DWORD WINAPI propagateBufferForever(LPVOID pv) {
-	while (!shouldStop) {
-		HRESULT hr = propagateBufferOnce();
-		if (FAILED(hr)) {
+static DWORD WINAPI propagateBufferForever(LPVOID pv) 
+{
+	auto* pipeline = (MFPipeline*)pv;
+
+	while (!shouldStop)
+	{
+		const HRESULT hr = propagateBufferOnce(pipeline);
+		if (FAILED(hr))
+		{
 			return hr;
 		}
 	}
+
 	return S_OK;
 }
