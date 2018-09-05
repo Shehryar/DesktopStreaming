@@ -238,7 +238,7 @@ bool MFNVENCH264Encoder::Init()
 	OutputMediaType->SetUINT32(MF_MT_AVG_BITRATE, Settings.AvgBitrate * 1024);
 	OutputMediaType->SetUINT32(MF_MT_MAX_KEYFRAME_SPACING, Settings.MaxKeyFrameSpacing); //10
 
-	ApplySettings();
+	//ApplySettings();
 
 	hr = _encoder->SetOutputType(outStreams[0], OutputMediaType, 0);
 
