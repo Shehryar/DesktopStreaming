@@ -390,10 +390,14 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					settings.RateControlMode = VFMFCommonRateControlMode_CBR;
 
 					// enumerating codecs, use GPU encoder if available, H264 MS CPU if not available
-					/*MFCodecList _videoCodecs;
+					MFCodecList _videoCodecs;
 					_videoCodecs.Enumerate(MFMediaType_Video, MFVideoFormat_H264, TRUE);
-
-					if (_videoCodecs.IsQSVH264EncoderAvailable())
+				
+					if (_videoCodecs.IsNVENCH264EncoderAvailable())
+					{
+						settings.Encoder = VIDEO_ENCODER_NVENC_H264;
+					}
+					else if (_videoCodecs.IsQSVH264EncoderAvailable())
 					{
 						settings.Encoder = VIDEO_ENCODER_QSV_H264;
 					}
@@ -404,7 +408,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					else if (_videoCodecs.IsAMDH264EncoderAvailable())
 					{
 						settings.Encoder = VIDEO_ENCODER_AMD_H264;
-					}*/
+					}
 
 					BOOL hwEncoder = FALSE;											
 
