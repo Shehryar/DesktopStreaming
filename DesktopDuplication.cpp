@@ -194,7 +194,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 	MFUtils::Startup();
 
-	const INT FRAME_RATE = 10;
+	const INT FRAME_RATE = 60;
 
 	//HRESULT encoderResult = S_OK;
 	INT SingleOutput;
@@ -345,8 +345,9 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 			{
 				if (_pipeline.videnc == nullptr)
 				{
-					VFMFVideoEncoder videoEncoder = VIDEO_ENCODER_MS_H264;
+					//VFMFVideoEncoder videoEncoder = VIDEO_ENCODER_MS_H264;
 					//VFMFVideoEncoder videoEncoder = VIDEO_ENCODER_NVENC_H264;
+					VFMFVideoEncoder videoEncoder = VIDEO_ENCODER_QSV_H264;
 
 					//buffers
 					_pipeline.videoCapBuffer = new MFRingBuffer(25);
@@ -403,7 +404,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 					BOOL hwEncoder = FALSE;											
 
-					switch (videoEncoder)
+					switch (settings.Encoder)
 					{
 					case VIDEO_ENCODER_MS_H264:
 						_pipeline.videnc = new MFMSH264Encoder(&_pipeline, mt, settings);
