@@ -92,7 +92,7 @@
       <TargetMachine>MachineX86</TargetMachine>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;Winmm.lib;Avrt.lib;Strmiids.lib;libavutil.a;libswscale.a;libavfilter.a;mfplat.lib;mf.lib;mfreadwrite.lib;mfuuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Dsound.lib;d3d11.lib;dxgi.lib;Winmm.lib;Avrt.lib;Strmiids.lib;libavutil.a;libswscale.a;libavfilter.a;mfplat.lib;mf.lib;mfreadwrite.lib;mfuuid.lib;Kernel32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableDpiAwareness>true</EnableDpiAwareness>
@@ -113,7 +113,7 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;evr.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;evr.lib;Kernel32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableDpiAwareness>true</EnableDpiAwareness>
@@ -167,6 +167,7 @@
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+    <ClCompile Include="DirectSoundSilenceOutput.cpp" />
     <ClCompile Include="DisplayManager.cpp" />
     <ClCompile Include="DuplicationManager.cpp" />
     <ClCompile Include="MFCodecList.cpp" />
@@ -182,12 +183,14 @@
     <ClCompile Include="OutputManager.cpp" />
     <ClCompile Include="ThreadManager.cpp" />
     <ClCompile Include="VFDebug.cpp" />
+    <ClCompile Include="WAVWriter.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\..\Program Files (x86)\Windows Kits\10\Include\10.0.16299.0\um\wmcodecdsp.h" />
     <ClInclude Include="AudioLoopbackSource.h" />
     <ClInclude Include="CodecAPIHelper.h" />
     <ClInclude Include="CommonTypes.h" />
+    <ClInclude Include="DirectSoundSilenceOutput.h" />
     <ClInclude Include="DisplayManager.h" />
     <ClInclude Include="DuplicationManager.h" />
     <ClInclude Include="MFCodecList.h" />
@@ -208,6 +211,7 @@
     <ClInclude Include="VFDebug.h" />
     <ClInclude Include="VFMFCaptureEnums.h" />
     <ClInclude Include="VFMFCaptureTypes.h" />
+    <ClInclude Include="WAVWriter.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="PixelShader.hlsl">

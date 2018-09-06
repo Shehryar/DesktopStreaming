@@ -685,12 +685,12 @@ IMFSample* MFColorConverter::BGR32ToNV12S(RAWVideoFrame* frame, BOOL flip)
 	if (frame == nullptr)
 		return nullptr;
 
-	IMFSample *newSample = NULL;
-	IMFMediaBuffer *newBuffer = NULL;
+	IMFSample *newSample = nullptr;
+	IMFMediaBuffer *newBuffer = nullptr;
 
 	const DWORD cbBuffer = frame->Info.Width * 1.5 * frame->Info.Height;
 
-	BYTE *pData = NULL;
+	BYTE *pData = nullptr;
 
 	// Create a new memory buffer.
 	HRESULT hr = MFCreateMemoryBuffer(cbBuffer, &newBuffer);
@@ -698,7 +698,7 @@ IMFSample* MFColorConverter::BGR32ToNV12S(RAWVideoFrame* frame, BOOL flip)
 	// Lock the buffer and copy the video frame to the buffer.
 	if (SUCCEEDED(hr))
 	{
-		hr = newBuffer->Lock(&pData, NULL, NULL);
+		hr = newBuffer->Lock(&pData, nullptr, nullptr);
 	}
 	if (SUCCEEDED(hr))
 	{

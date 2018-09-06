@@ -11,7 +11,7 @@
 #include <iostream> 
 #include <mfapi.h>
 #include <mfobjects.h>
-#include <limits.h>
+#include <climits>
 #include <Mferror.h>
 #include <mftransform.h>
 #include "OutputManager.h"
@@ -26,12 +26,15 @@
 #include "MFMuxAsync.h"
 #include "MFMSAACEncoder.h"
 
+#include "AudioLoopbackSource.h"
+
 #include <iostream>
 #include <ctime>
 #include <ratio>
 #include <chrono>
 #include "MFQSVEncoder.h"
 #include "MFCodecList.h"
+#include "DirectSoundSilenceOutput.h"
 
 using namespace std::chrono;
 
@@ -42,7 +45,7 @@ using namespace std::chrono;
 #pragma comment(lib, "evr.lib")
 #pragma comment(lib, "wmcodecdspuuid.lib")
 
-#define AUDIO_ENCODER 0
+#define AUDIO_ENCODER 1
 #define FAKE_COORDINATES 0
 
 //
@@ -58,6 +61,8 @@ DWORD mftStatus = 0;
 //MFMSH264Encoder *videoEncoder;
 MFPipeline _pipeline;
 MFColorConverter _colorConv(nullptr);
+
+DirectSoundSilenceOutput _silenceGenerator;
 
 // Below are lists of errors expect from Dxgi API calls when a transition event like mode change, PnpStop, PnpStart
 // desktop switch, TDR or session disconnect/reconnect. In all these cases we want the application to clean up the threads that process
@@ -148,7 +153,7 @@ DYNAMIC_WAIT::DYNAMIC_WAIT() : m_CurrentWaitBandIdx(0), m_WaitCountInCurrentBand
 	m_QPCValid = QueryPerformanceFrequency(&m_QPCFrequency);
 	m_LastWakeUpTime.QuadPart = 0L;
 }
-
+  
 DYNAMIC_WAIT::~DYNAMIC_WAIT()
 {
 }
@@ -211,7 +216,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 	// Event used by the threads to signal an unexpected error and we want to quit the app
 
-	HANDLE UnexpectedErrorEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+	const HANDLE UnexpectedErrorEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
 	if (!UnexpectedErrorEvent)
 	{
 		ProcessFailure(nullptr, L"UnexpectedErrorEvent creation failed", L"Error", E_UNEXPECTED);
@@ -219,7 +224,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	}
 
 	// Event for when a thread encounters an expected error
-	HANDLE ExpectedErrorEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+	const HANDLE ExpectedErrorEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
 	if (!ExpectedErrorEvent)
 	{
 		ProcessFailure(nullptr, L"ExpectedErrorEvent creation failed", L"Error", E_UNEXPECTED);
@@ -227,7 +232,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	}
 
 	// Event to tell spawned threads to quit
-	HANDLE TerminateThreadsEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+	const HANDLE TerminateThreadsEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
 	if (!TerminateThreadsEvent)
 	{
 		ProcessFailure(nullptr, L"TerminateThreadsEvent creation failed", L"Error", E_UNEXPECTED);
@@ -335,7 +340,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 			}
 			else
 			{
-				// First time through the loop so nothing to clean up
+				// First time through the loop  so nothing to clean up
 				FirstTime = false;
 			}
 
@@ -345,7 +350,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 			{
 				if (_pipeline.videnc == nullptr)
 				{
-					//VFMFVideoEncoder videoEncoder = VIDEO_ENCODER_MS_H264;
 					//VFMFVideoEncoder videoEncoder = VIDEO_ENCODER_NVENC_H264;
 					VFMFVideoEncoder videoEncoder = VIDEO_ENCODER_QSV_H264;
 
@@ -353,7 +357,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					_pipeline.videoCapBuffer = new MFRingBuffer(25);
 					_pipeline.videoEncBuffer = new MFRingBuffer(25);
 
-					VFVideoMediaType mt{};
+					VFVideoMediaType mt{}; 
 					//memset(&mt, 0, sizeof(VFVideoMediaType));
 
 					if (FAKE_COORDINATES)
@@ -363,8 +367,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					}
 					else
 					{
-					mt.Width = DeskBounds.right - DeskBounds.left;
-					mt.Height = DeskBounds.bottom - DeskBounds.top;
+						mt.Width = DeskBounds.right - DeskBounds.left;
+						mt.Height = DeskBounds.bottom - DeskBounds.top;
 					}
 
 					mt.FrameRateNum = FRAME_RATE;
@@ -386,7 +390,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					settings.RateControlMode = VFMFCommonRateControlMode_CBR;
 
 					// enumerating codecs, use GPU encoder if available, H264 MS CPU if not available
-					MFCodecList _videoCodecs;
+					/*MFCodecList _videoCodecs;
 					_videoCodecs.Enumerate(MFMediaType_Video, MFVideoFormat_H264, TRUE);
 
 					if (_videoCodecs.IsQSVH264EncoderAvailable())
@@ -400,7 +404,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					else if (_videoCodecs.IsAMDH264EncoderAvailable())
 					{
 						settings.Encoder = VIDEO_ENCODER_AMD_H264;
-					}
+					}*/
 
 					BOOL hwEncoder = FALSE;											
 
@@ -451,15 +455,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 						DisplayMsg(L"Failed to initiate muxer", L"Error", S_OK);
 						return 1;
 					}
-
-					_pipeline.videnc->Start();
-
-					if (_pipeline.audenc)
-					{
-						_pipeline.audenc->Start();
-					}
-
-					_pipeline.mux->Start();
 				}
 
 				const HANDLE shared_handle = OutMgr.GetSharedHandle();
@@ -476,21 +471,26 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 			if (AUDIO_ENCODER)
 			{
+				int channels = 0;
+				int sampleRate = 0;
+				const int bitrate = 128;
+				int bufferSize = 0;
+				int blockAlign = 0;
+				int bps = 0;						
+
+				// configure audio source (speakers)
+				LoopbackCaptureSetup(&channels, &bps, &sampleRate, &bufferSize, &blockAlign);
+
+				// configure encoder
 				if (_pipeline.audenc == nullptr)
 				{
-					VFMFAudioEncoder audioEncoder = AUDIO_ENCODER_MS_AAC;
-
 					//buffers
 					_pipeline.audioCapBuffer = new MFRingBuffer(200);
 					_pipeline.audioEncBuffer = new MFRingBuffer(200);
 
 					VFAudioMediaType mt{};
 					
-					const int channels = 2;
-					const int sampleRate = 44100;
-					const int bitrate = 128;
-
-					mt.BPS = 16;
+					mt.BPS = bps;
 					mt.Channels = channels;
 					mt.SampleRate = sampleRate;
 					
@@ -508,9 +508,25 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					{
 						DisplayMsg(L"Failed to initiate audio encoder", L"Error", S_OK);
 						return 1;
-					}
+					}					
+										
+					_pipeline.mux->AddAudioStream(_pipeline.audenc->OutputMediaType);
 				}
 			}
+
+			_silenceGenerator.Start();
+
+			LoopbackCaptureStart(&_pipeline);			
+
+			while (_pipeline.audioCapBuffer->empty() || _pipeline.lastAudioTS < 500 * 10000)
+			{
+				Sleep(1);
+			}
+
+			_pipeline.videnc->Start();
+			_pipeline.audenc->Start();
+
+			_pipeline.mux->Start();
 
 			// We start off in occluded state and we should immediate get a occlusion status window message
 			Occluded = true;
@@ -550,6 +566,10 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	CloseHandle(UnexpectedErrorEvent);
 	CloseHandle(ExpectedErrorEvent);
 	CloseHandle(TerminateThreadsEvent);
+
+	LoopbackCaptureClear();
+
+	_silenceGenerator.Stop();
 
 	if (_pipeline.videoCapBuffer)
 	{
@@ -883,7 +903,7 @@ DWORD WINAPI DDProc(_In_ void* Param)
 	bool WaitToProcessCurrentFrame = false;
 	FRAME_DATA CurrentData;
 
-	const double frameRate = 60; // MARK - FPS
+	const double frameRate = 10;
 	const high_resolution_clock::time_point firstFrameTimestamp = high_resolution_clock::now();
 	const INT64 frameDuration = 1000 / frameRate;
 	INT64 frameNumber = 0;

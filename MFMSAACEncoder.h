@@ -42,7 +42,9 @@ public:
 	*/
 	void Join() const;
 
-	VFAudioMediaType AudioFormat;	
+	VFAudioMediaType AudioFormat{};
+
+	static IMFSample* PCMToMFSample(RAWAudioFrame* frame);
 private:
 	/*
 	Audio encoder thread main code
@@ -65,8 +67,8 @@ private:
 	IMFTransform *pEncoder;
 	IMFMediaType *pInType;
 	IMFMediaEventGenerator *pEvGenerator;
-	MFT_INPUT_STREAM_INFO inStreamInfo;
-	MFT_OUTPUT_STREAM_INFO outStreamInfo;
+	MFT_INPUT_STREAM_INFO inStreamInfo{};
+	MFT_OUTPUT_STREAM_INFO outStreamInfo{};
 
 	/*
 	Thread reference
