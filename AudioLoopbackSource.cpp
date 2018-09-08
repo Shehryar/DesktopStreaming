@@ -27,7 +27,7 @@ UINT32 pnFrames;
 
 CRITICAL_SECTION csMyLock;  // shared critical section. Starts not locked...
 
-int shouldStop = true;
+bool shouldStop = false;
 
 BYTE pBufLocal[1024 * 1024]; // 1MB is quite awhile 
 long pBufOriginalSize = 1024 * 1024;
@@ -141,7 +141,7 @@ HRESULT LoopbackCaptureSetup(int* channels, int* bps, int* sampleRate, int* buff
 	if (!InitializeCriticalSectionAndSpinCount(&gSharedState, 0x00000400))
 		return E_FAIL;
 
-	assert(shouldStop); // double start would be odd...
+	assert(!shouldStop); // double start would be odd...
 	shouldStop = false; // allow graphs to restart, if they so desire...
 	pnFrames = 0;
 	const bool bInt16 = true; // makes it actually work, for some reason...my guess is it's a more common format
@@ -656,7 +656,7 @@ HRESULT LoopbackCaptureTakeFromBuffer(BYTE pBuf[], int iSize, WAVEFORMATEX* ifNo
 void loopBackRelease()
 {
 	// tell running collector thread to end...
-	shouldStop = 1;
+	shouldStop = true;
 	WaitForSingleObject(m_hThread, INFINITE);
 	CloseHandle(m_hThread);
 	m_hThread = nullptr;

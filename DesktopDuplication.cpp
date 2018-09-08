@@ -350,14 +350,11 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 			{
 				if (_pipeline.videnc == nullptr)
 				{
-					//VFMFVideoEncoder videoEncoder = VIDEO_ENCODER_NVENC_H264;
-
 					//buffers
 					_pipeline.videoCapBuffer = new MFRingBuffer(25);
 					_pipeline.videoEncBuffer = new MFRingBuffer(25);
 
 					VFVideoMediaType mt{}; 
-					//memset(&mt, 0, sizeof(VFVideoMediaType));
 
 					if (FAKE_COORDINATES)
 					{
@@ -375,7 +372,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					mt.SubType = MFVideoFormat_NV12;
 
 					VFMFVideoEncoderSettings settings{};
-					//memset(&settings, 0, sizeof(VFMFVideoEncoderSettings));
 					settings.H264Profile = VFMFH264VProfile_Main;
 					settings.H264Level = VFMFH264VLevel4_2;
 					settings.AvgBitrate = 2000;
@@ -389,7 +385,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					settings.RateControlMode = VFMFCommonRateControlMode_CBR;
 
 					// enumerating codecs, use GPU encoder if available, H264 MS CPU if not available
-					/*MFCodecList _videoCodecs;
+					MFCodecList _videoCodecs;
 					_videoCodecs.Enumerate(MFMediaType_Video, MFVideoFormat_H264, TRUE);
 
 					if (_videoCodecs.IsQSVH264EncoderAvailable())
@@ -403,7 +399,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					else if (_videoCodecs.IsAMDH264EncoderAvailable())
 					{
 						settings.Encoder = VIDEO_ENCODER_AMD_H264;
-					}*/
+					}
 
 					BOOL hwEncoder = FALSE;											
 
