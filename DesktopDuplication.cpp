@@ -350,12 +350,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 			{
 				if (_pipeline.videnc == nullptr)
 				{
-<<<<<<< HEAD
-=======
-					//VFMFVideoEncoder videoEncoder = VIDEO_ENCODER_NVENC_H264;
-					VFMFVideoEncoder videoEncoder = VIDEO_ENCODER_QSV_H264;
-
->>>>>>> 0c2a790c7023041a20768f135a642e0be49ceb81
 					//buffers
 					_pipeline.videoCapBuffer = new MFRingBuffer(25);
 					_pipeline.videoEncBuffer = new MFRingBuffer(25);
@@ -393,12 +387,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					// enumerating codecs, use GPU encoder if available, H264 MS CPU if not available
 					MFCodecList _videoCodecs;
 					_videoCodecs.Enumerate(MFMediaType_Video, MFVideoFormat_H264, TRUE);
-				
-					if (_videoCodecs.IsNVENCH264EncoderAvailable())
-					{
-						settings.Encoder = VIDEO_ENCODER_NVENC_H264;
-					}
-					else if (_videoCodecs.IsQSVH264EncoderAvailable())
+
+					if (_videoCodecs.IsQSVH264EncoderAvailable())
 					{
 						settings.Encoder = VIDEO_ENCODER_QSV_H264;
 					}
