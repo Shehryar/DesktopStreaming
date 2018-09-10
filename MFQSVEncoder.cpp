@@ -45,6 +45,8 @@ HRESULT MFQSVEncoder::Start()
 		return E_FAIL;
 	}
 
+	_started = TRUE;
+
 	StopFlag = FALSE;
 	Finished = FALSE;
 

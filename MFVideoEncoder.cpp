@@ -2,7 +2,7 @@
 #include "MFUtils.h"
 
 MFVideoEncoder::MFVideoEncoder(MFPipeline* pipeline, VFVideoMediaType videoInfo, VFMFVideoEncoderSettings settings)
-	: MFFilter(pipeline), Finished(0)
+	: MFFilter(pipeline), _started(FALSE), Finished(0)
 {
 	codecAPI = nullptr;
 	Settings = settings;
