@@ -45,8 +45,8 @@ using namespace std::chrono;
 #pragma comment(lib, "evr.lib")
 #pragma comment(lib, "wmcodecdspuuid.lib")
 
-#define AUDIO_ENCODER 1
-#define FAKE_COORDINATES 0
+#define AUDIO_ENCODER 0
+#define FAKE_COORDINATES 1
 
 //
 // Globals
@@ -63,6 +63,7 @@ MFPipeline _pipeline;
 MFColorConverter _colorConv(nullptr);
 
 DirectSoundSilenceOutput _silenceGenerator;
+bool _encoderInitialized;
 
 // Below are lists of errors expect from Dxgi API calls when a transition event like mode change, PnpStop, PnpStart
 // desktop switch, TDR or session disconnect/reconnect. In all these cases we want the application to clean up the threads that process
@@ -71,32 +72,32 @@ DirectSoundSilenceOutput _silenceGenerator;
 
 // These are the errors we expect from general Dxgi API due to a transition
 HRESULT SystemTransitionsExpectedErrors[] = {
-												DXGI_ERROR_DEVICE_REMOVED,
-												DXGI_ERROR_ACCESS_LOST,
-												static_cast<HRESULT>(WAIT_ABANDONED),
-												S_OK                                    // Terminate list with zero valued HRESULT
+	DXGI_ERROR_DEVICE_REMOVED,
+	DXGI_ERROR_ACCESS_LOST,
+	static_cast<HRESULT>(WAIT_ABANDONED),
+	S_OK                                    // Terminate list with zero valued HRESULT
 };
 
 // These are the errors we expect from IDXGIOutput1::DuplicateOutput due to a transition
 HRESULT CreateDuplicationExpectedErrors[] = {
-												DXGI_ERROR_DEVICE_REMOVED,
-												static_cast<HRESULT>(E_ACCESSDENIED),
-												DXGI_ERROR_UNSUPPORTED,
-												DXGI_ERROR_SESSION_DISCONNECTED,
-												S_OK                                    // Terminate list with zero valued HRESULT
+	DXGI_ERROR_DEVICE_REMOVED,
+	static_cast<HRESULT>(E_ACCESSDENIED),
+	DXGI_ERROR_UNSUPPORTED,
+	DXGI_ERROR_SESSION_DISCONNECTED,
+	S_OK                                    // Terminate list with zero valued HRESULT
 };
 
 // These are the errors we expect from IDXGIOutputDuplication methods due to a transition
 HRESULT FrameInfoExpectedErrors[] = {
-										DXGI_ERROR_DEVICE_REMOVED,
-										DXGI_ERROR_ACCESS_LOST,
-										S_OK                                    // Terminate list with zero valued HRESULT
+	DXGI_ERROR_DEVICE_REMOVED,
+	DXGI_ERROR_ACCESS_LOST,
+	S_OK                                    // Terminate list with zero valued HRESULT
 };
 
 // These are the errors we expect from IDXGIAdapter::EnumOutputs methods due to outputs becoming stale during a transition
 HRESULT EnumOutputsExpectedErrors[] = {
-										  DXGI_ERROR_NOT_FOUND,
-										  S_OK                                    // Terminate list with zero valued HRESULT
+	DXGI_ERROR_NOT_FOUND,
+	S_OK                                    // Terminate list with zero valued HRESULT
 };
 
 
@@ -143,9 +144,9 @@ private:
 	BOOL                    m_QPCValid;
 };
 const WAIT_BAND DYNAMIC_WAIT::m_WaitBands[WAIT_BAND_COUNT] = {
-																 {250, 20},
-																 {2000, 60},
-																 {5000, WAIT_BAND_STOP}   // Never move past this band
+	{ 250, 20 },
+{ 2000, 60 },
+{ 5000, WAIT_BAND_STOP }   // Never move past this band
 };
 
 DYNAMIC_WAIT::DYNAMIC_WAIT() : m_CurrentWaitBandIdx(0), m_WaitCountInCurrentBand(0)
@@ -153,7 +154,7 @@ DYNAMIC_WAIT::DYNAMIC_WAIT() : m_CurrentWaitBandIdx(0), m_WaitCountInCurrentBand
 	m_QPCValid = QueryPerformanceFrequency(&m_QPCFrequency);
 	m_LastWakeUpTime.QuadPart = 0L;
 }
-  
+
 DYNAMIC_WAIT::~DYNAMIC_WAIT()
 {
 }
@@ -200,6 +201,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	MFUtils::Startup();
 
 	const INT FRAME_RATE = 60;
+	_encoderInitialized = false;
 
 	//HRESULT encoderResult = S_OK;
 	INT SingleOutput;
@@ -354,11 +356,11 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 					_pipeline.videoCapBuffer = new MFRingBuffer(25);
 					_pipeline.videoEncBuffer = new MFRingBuffer(25);
 
-					VFVideoMediaType mt{}; 
+					VFVideoMediaType mt{};
 
 					if (FAKE_COORDINATES)
 					{
-						mt.Width = 1920; 
+						mt.Width = 1920;
 						mt.Height = 1080;
 					}
 					else
@@ -401,7 +403,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 						settings.Encoder = VIDEO_ENCODER_AMD_H264;
 					}
 
-					BOOL hwEncoder = FALSE;											
+					BOOL hwEncoder = FALSE;
 
 					switch (settings.Encoder)
 					{
@@ -416,10 +418,10 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 						hwEncoder = TRUE;
 						_pipeline.videnc = new MFNVENCH264Encoder(&_pipeline, mt, settings);
 						break;
-					//case VIDEO_ENCODER_AMD_H264:
-					//	hwEncoder = TRUE;
-					//	_pipeline.videnc = new MFAMDH264Encoder(&_pipeline, mt, settings);
-					//	break;
+						//case VIDEO_ENCODER_AMD_H264:
+						//	hwEncoder = TRUE;
+						//	_pipeline.videnc = new MFAMDH264Encoder(&_pipeline, mt, settings);
+						//	break;
 					default:;
 					}
 
@@ -464,64 +466,75 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 				}
 			}
 
-			if (AUDIO_ENCODER)
+#if AUDIO_ENCODER
+			int channels = 0;
+			int sampleRate = 0;
+			const int bitrate = 128;
+			int bufferSize = 0;
+			int blockAlign = 0;
+			int bps = 0;
+
+			// configure audio source (speakers)
+			LoopbackCaptureSetup(&channels, &bps, &sampleRate, &bufferSize, &blockAlign);
+
+			// configure encoder
+			if (_pipeline.audenc == nullptr)
 			{
-				int channels = 0;
-				int sampleRate = 0;
-				const int bitrate = 128;
-				int bufferSize = 0;
-				int blockAlign = 0;
-				int bps = 0;						
+				//buffers
+				_pipeline.audioCapBuffer = new MFRingBuffer(200);
+				_pipeline.audioEncBuffer = new MFRingBuffer(200);
 
-				// configure audio source (speakers)
-				LoopbackCaptureSetup(&channels, &bps, &sampleRate, &bufferSize, &blockAlign);
+				VFAudioMediaType mt{};
 
-				// configure encoder
+				mt.BPS = bps;
+				mt.Channels = channels;
+				mt.SampleRate = sampleRate;
+
+				_pipeline.HAS_AUDIO = TRUE;
+
+				_pipeline.audenc = new MFMSAACEncoder(&_pipeline, mt, bitrate);
+
 				if (_pipeline.audenc == nullptr)
 				{
-					//buffers
-					_pipeline.audioCapBuffer = new MFRingBuffer(200);
-					_pipeline.audioEncBuffer = new MFRingBuffer(200);
-
-					VFAudioMediaType mt{};
-					
-					mt.BPS = bps;
-					mt.Channels = channels;
-					mt.SampleRate = sampleRate;
-					
-					_pipeline.HAS_AUDIO = TRUE;
-
-					_pipeline.audenc = new MFMSAACEncoder(&_pipeline, mt, bitrate);
-					
-					if (_pipeline.audenc == nullptr)
-					{
-						DisplayMsg(L"Failed to set audio encoder", L"Error", S_OK);
-						return 1;
-					}
-
-					if (!_pipeline.audenc->Initiated)
-					{
-						DisplayMsg(L"Failed to initiate audio encoder", L"Error", S_OK);
-						return 1;
-					}					
-										
-					_pipeline.mux->AddAudioStream(_pipeline.audenc->OutputMediaType);
+					DisplayMsg(L"Failed to set audio encoder", L"Error", S_OK);
+					return 1;
 				}
+
+				if (!_pipeline.audenc->Initiated)
+				{
+					DisplayMsg(L"Failed to initiate audio encoder", L"Error", S_OK);
+					return 1;
+				}
+
+				_pipeline.mux->AddAudioStream(_pipeline.audenc->OutputMediaType);
 			}
 
 			_silenceGenerator.Start();
 
-			LoopbackCaptureStart(&_pipeline);			
+			LoopbackCaptureStart(&_pipeline);
 
 			while (_pipeline.audioCapBuffer->empty() || _pipeline.lastAudioTS < 500 * 10000)
 			{
 				Sleep(1);
 			}
+#endif
 
-			_pipeline.videnc->Start();
-			_pipeline.audenc->Start();
+			if (!_pipeline.videnc->IsStarted())
+			{
+				_pipeline.videnc->Start();
+			}
 
-			_pipeline.mux->Start();
+#if AUDIO_ENCODER
+			if (!((MFMSAACEncoder*)_pipeline.audenc)->IsStarted())
+			{
+				_pipeline.audenc->Start();
+			}
+#endif
+
+			if (!_pipeline.mux->IsStarted())
+			{
+				_pipeline.mux->Start();
+			}
 
 			// We start off in occluded state and we should immediate get a occlusion status window message
 			Occluded = true;
@@ -562,9 +575,11 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	CloseHandle(ExpectedErrorEvent);
 	CloseHandle(TerminateThreadsEvent);
 
+#if AUDIO_ENCODER
 	LoopbackCaptureClear();
 
 	_silenceGenerator.Stop();
+#endif
 
 	if (_pipeline.videoCapBuffer)
 	{
@@ -625,10 +640,10 @@ void DEBUG_OUTPUT(LPCWSTR lpszFormat, ...)
 	va_start(args, lpszFormat);
 	TCHAR szBuffer[512]; // get rid of this hard-coded buffer
 
-	// ReSharper disable once CppDeprecatedEntity
+						 // ReSharper disable once CppDeprecatedEntity
 	_vsnwprintf(szBuffer, 511, lpszFormat, args);
 
-	::OutputDebugString(szBuffer);	
+	::OutputDebugString(szBuffer);
 
 	va_end(args);
 }
@@ -638,7 +653,7 @@ void DEBUG_OUTPUT_S(LPCWSTR msg)
 	DEBUG_OUTPUT(L"%s", msg);
 }
 
-BYTE* GetImageData(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Texture2D* texture, /*OUT*/ int* nWidth, /*OUT*/ int* nHeight, int* pitch) 
+BYTE* GetImageData(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Texture2D* texture, /*OUT*/ int* nWidth, /*OUT*/ int* nHeight, int* pitch)
 {
 	if (texture)
 	{
@@ -663,7 +678,7 @@ BYTE* GetImageData(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Tex
 		HRESULT hr = device->CreateTexture2D(&CopyBufferDesc, nullptr, &texTemp);
 		if (FAILED(hr))
 		{
-			
+
 		}
 
 		context->CopyResource(texTemp, texture);
@@ -729,18 +744,18 @@ HRESULT EncodeFrame(_In_ ID3D11Device* device, _In_ ID3D11DeviceContext* context
 	int pitch = 0;
 
 	BYTE* data = GetImageData(device, context, frameData, &widthx, &heightx, &pitch);
-	
+
 	const auto frame = new RAWVideoFrame();
 	frame->Buffer = data;
 	frame->BufferSize = heightx * pitch;
 	frame->Info.Width = widthx;
 	frame->Info.Height = heightx;
 	frame->Info.Stride = pitch;
-	
+
 	IMFSample* videoSampleNV12 = _colorConv.BGR32ToNV12S(frame, false);
 	videoSampleNV12->SetSampleTime(timestamp * 10000);
 	videoSampleNV12->SetSampleDuration(duration * 10000);
-		
+
 	_pipeline.videoCapBuffer->push(videoSampleNV12);
 
 	//SafeReleaseSample(&videoSampleNV12);

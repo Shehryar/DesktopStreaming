@@ -27,7 +27,8 @@ MFMuxAsync::MFMuxAsync(MFPipeline* pipeline, LPCWSTR lpszSaveFileName, VFVideoMe
 	videoOutMT(nullptr),
 	audioInMT(nullptr),
 	audioOutMT(nullptr),
-	Finished(FALSE)
+	Finished(FALSE),
+	started(FALSE)
 {
 	lpstrFileName = StrDupW(lpszSaveFileName);
 	InitializeCriticalSectionEx(&cs, 0, CRITICAL_SECTION_NO_DEBUG_INFO);

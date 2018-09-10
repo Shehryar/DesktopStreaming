@@ -51,6 +51,8 @@ HRESULT MFNVENCH264Encoder::Start()
 		return E_FAIL;
 	}
 
+	_started = TRUE;
+
 	Finished = FALSE;
 	StopFlag = FALSE;
 

@@ -239,6 +239,8 @@ HRESULT MFMSH264Encoder::Start()
 		return E_FAIL;
 	}
 
+	_started = TRUE;
+
 	StopFlag = FALSE;
 	_encodeThread = new std::thread(&MFMSH264Encoder::ProcessData, this);
 

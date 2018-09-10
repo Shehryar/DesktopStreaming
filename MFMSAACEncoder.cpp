@@ -22,6 +22,7 @@ MFMSAACEncoder::MFMSAACEncoder(MFPipeline* pipeline, VFAudioMediaType audioForma
 	
 	_firstSample = TRUE;
 	_baseTime = 0;
+	_started = FALSE;
 
 	this->Init();
 }
@@ -172,6 +173,8 @@ HRESULT MFMSAACEncoder::Start()
 		Finished = TRUE;
 		return E_FAIL;
 	}
+
+	_started = TRUE;
 
 	StopFlag = FALSE;
 	encodeThread = new std::thread(&MFMSAACEncoder::ProcessData, this);
