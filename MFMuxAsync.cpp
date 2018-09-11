@@ -161,6 +161,8 @@ HRESULT MFMuxAsync::Start()
 		return E_FAIL;
 	}
 
+	started = TRUE;
+
 	muxThread = new std::thread(&MFMuxAsync::ThreadProc, this);
 	return S_OK;
 }

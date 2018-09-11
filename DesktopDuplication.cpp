@@ -45,7 +45,7 @@ using namespace std::chrono;
 #pragma comment(lib, "evr.lib")
 #pragma comment(lib, "wmcodecdspuuid.lib")
 
-#define AUDIO_ENCODER 0
+#define AUDIO_ENCODER 1
 #define FAKE_COORDINATES 1
 
 //
