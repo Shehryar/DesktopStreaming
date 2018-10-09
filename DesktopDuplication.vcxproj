@@ -86,13 +86,15 @@
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(OutDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\work\sheshryar-hussian\ffmpeg;$(OutDir)</AdditionalIncludeDirectories>
+      <AdditionalUsingDirectories>%(AdditionalUsingDirectories)</AdditionalUsingDirectories>
     </ClCompile>
     <Link>
       <TargetMachine>MachineX86</TargetMachine>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>Dsound.lib;d3d11.lib;dxgi.lib;Winmm.lib;Avrt.lib;Strmiids.lib;libavutil.a;libswscale.a;libavfilter.a;mfplat.lib;mf.lib;mfreadwrite.lib;mfuuid.lib;Kernel32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Dsound.lib;d3d11.lib;dxgi.lib;Winmm.lib;Avrt.lib;bcrypt.lib;Strmiids.lib;libavutil.a;libswscale.a;libavfilter.a;mfplat.lib;mf.lib;mfreadwrite.lib;mfuuid.lib;Kernel32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\work\sheshryar-hussian\FFmpeg\libavutil;C:\work\sheshryar-hussian\FFmpeg\libswscale;C:\work\sheshryar-hussian\FFmpeg\libavfilter;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <Manifest>
       <EnableDpiAwareness>true</EnableDpiAwareness>
