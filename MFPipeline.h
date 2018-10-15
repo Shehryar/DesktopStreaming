@@ -26,6 +26,7 @@ class MFCaptureSourceAsync;
 class MFVideoEncoder;
 class MFMuxAsync;
 class MFAudioRenderer;
+class MFRtpSink;
 class MFFilter;
 
 struct MFPipeline
@@ -47,6 +48,8 @@ struct MFPipeline
 	MFMuxAsync *mux;
 
 	MFAudioRenderer* audioRenderer;
+
+	MFRtpSink *rtpsink;
 
 	BOOL HAS_AUDIO;
 	BOOL VIDEO_READY_FLAG;

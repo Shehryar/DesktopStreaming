@@ -27,11 +27,11 @@ MFMuxAsync::MFMuxAsync(MFPipeline* pipeline, LPCWSTR lpszSaveFileName, VFVideoMe
 	videoOutMT(nullptr),
 	audioInMT(nullptr),
 	audioOutMT(nullptr),
-	Finished(FALSE),
-	started(FALSE)
+	Finished(FALSE)
 {
 	lpstrFileName = StrDupW(lpszSaveFileName);
 	InitializeCriticalSectionEx(&cs, 0, CRITICAL_SECTION_NO_DEBUG_INFO);
+	_started = FALSE;
 
 	m_videoFormat = videoFormat;
 	bUseHardwareEncoder = useHardwareEncoder;
@@ -161,7 +161,7 @@ HRESULT MFMuxAsync::Start()
 		return E_FAIL;
 	}
 
-	started = TRUE;
+	_started = TRUE;
 
 	muxThread = new std::thread(&MFMuxAsync::ThreadProc, this);
 	return S_OK;

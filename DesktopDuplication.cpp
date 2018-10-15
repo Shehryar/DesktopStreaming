@@ -24,6 +24,7 @@
 #include "MFNVENCH264Encoder.h"
 #include "MFColorConverter.h"
 #include "MFMuxAsync.h"
+#include "MFRtpSink.h"
 #include "MFMSAACEncoder.h"
 
 #include "AudioLoopbackSource.h"
@@ -452,6 +453,15 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 						DisplayMsg(L"Failed to initiate muxer", L"Error", S_OK);
 						return 1;
 					}
+
+
+					_pipeline.rtpsink = new MFRtpSink(&_pipeline);
+					if (_pipeline.mux == nullptr)
+					{
+						DisplayMsg(L"Failed to set rtp sink", L"Error", S_OK);
+						return 1;
+					}
+						
 				}
 
 				const HANDLE shared_handle = OutMgr.GetSharedHandle();
@@ -534,6 +544,11 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 			if (!_pipeline.mux->IsStarted())
 			{
 				_pipeline.mux->Start();
+			}
+
+			if (!_pipeline.rtpsink->IsStarted())
+			{
+				_pipeline.rtpsink->Start();
 			}
 
 			// We start off in occluded state and we should immediate get a occlusion status window message

@@ -180,6 +180,7 @@
     <ClCompile Include="MFMuxAsync.cpp" />
     <ClCompile Include="MFNVENCH264Encoder.cpp" />
     <ClCompile Include="MFQSVEncoder.cpp" />
+    <ClCompile Include="MFRtpSink.cpp" />
     <ClCompile Include="MFUtils.cpp" />
     <ClCompile Include="MFVideoEncoder.cpp" />
     <ClCompile Include="OutputManager.cpp" />
@@ -204,6 +205,7 @@
     <ClInclude Include="MFNVENCH264Encoder.h" />
     <ClInclude Include="MFPipeline.h" />
     <ClInclude Include="MFQSVEncoder.h" />
+    <ClInclude Include="MFRtpSink.h" />
     <ClInclude Include="MFUtils.h" />
     <ClInclude Include="MFVideoEncoder.h" />
     <ClInclude Include="OutputManager.h" />

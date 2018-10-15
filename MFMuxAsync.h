@@ -53,7 +53,6 @@ class MFMuxAsync : public MFFilter
 	LONGLONG baseVideoTime;
 	LONGLONG baseAudioTime;
 
-	bool started;
 
 	/*
 	Thread reference
@@ -87,9 +86,6 @@ public:
 
 	BOOL Finished;
 
-	BOOL IsStarted() const
-	{
-		return started;
-	}
+
 };
 

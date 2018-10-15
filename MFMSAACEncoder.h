@@ -46,12 +46,7 @@ public:
 
 	static IMFSample* PCMToMFSample(RAWAudioFrame* frame);
 
-	BOOL IsStarted() const
-	{
-		return _started;
-	}
 private:
-	BOOL _started;
 	/*
 	Audio encoder thread main code
 	*/

@@ -8,6 +8,8 @@ class MFFilter
 protected:
 	MFPipeline* Pipeline;
 	BOOL StopFlag;
+
+	BOOL _started;
 public:
 	MFFilter(MFPipeline* pipeline);
 	virtual ~MFFilter();
@@ -27,6 +29,11 @@ public:
 	{
 		if FAILED(_hr)
 			TraceE(L"TESTHR failed: %u\n", _hr);
+	}
+
+	BOOL IsStarted() const
+	{
+		return _started;
 	}
 };
 
