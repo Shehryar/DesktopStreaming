@@ -546,11 +546,11 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 				_pipeline.mux->Start();
 			}
 
-			if (!_pipeline.rtpsink->IsStarted())
+		/*	if (!_pipeline.rtpsink->IsStarted())
 			{
 				_pipeline.rtpsink->Start();
 			}
-
+*/
 			// We start off in occluded state and we should immediate get a occlusion status window message
 			Occluded = true;
 		}
@@ -632,6 +632,16 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 		}
 	}
 
+	if (_pipeline.rtpsink)
+	{
+		_pipeline.rtpsink->Stop();
+
+		while (!_pipeline.mux->Finished)
+		{
+			Sleep(10);
+		}
+
+	}
 	Sleep(2000);
 
 	if (msg.message == WM_QUIT)

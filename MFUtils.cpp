@@ -8,7 +8,7 @@
 #include <d3d9.h>
 #include <assert.h>
 
-#include "../VFDebug.h"
+#include "VFDebug.h"
 //#include "ImageHelper.h"
 //#include "MFColorConverter.h"
 
