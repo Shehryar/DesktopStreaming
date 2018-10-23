@@ -13,6 +13,7 @@ class MFRtpSink :public MFFilter
 	void ThreadProc();
 	HRESULT WriteVideoSample(IMFSample* pSample, MFTIME duration);
 public:
+
 	MFRtpSink(MFPipeline* pipeline);
 	~MFRtpSink();
 

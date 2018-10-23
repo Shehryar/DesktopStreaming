@@ -106,7 +106,7 @@
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(OutDir);live555\groupsock\include;live555\UsageEnvironment\include;live555\BasicUsageEnvironment\include;..\ffmpeg</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(OutDir);live555\groupsock\include;live555\UsageEnvironment\include;live555\BasicUsageEnvironment\include;..\ffmpeg;live555\liveMedia\include</AdditionalIncludeDirectories>
       <MinimalRebuild>false</MinimalRebuild>
       <CompileAsManaged>false</CompileAsManaged>
       <ExceptionHandling>false</ExceptionHandling>
@@ -178,6 +178,7 @@
     <ClCompile Include="MFCodecList.cpp" />
     <ClCompile Include="MFColorConverter.cpp" />
     <ClCompile Include="MFFilter.cpp" />
+    <ClCompile Include="MFH264LiveSource.cpp" />
     <ClCompile Include="MFMSAACEncoder.cpp" />
     <ClCompile Include="MFMSH264Encoder.cpp" />
     <ClCompile Include="MFMuxAsync.cpp" />
@@ -202,6 +203,7 @@
     <ClInclude Include="MFCodecList.h" />
     <ClInclude Include="MFColorConverter.h" />
     <ClInclude Include="MFFilter.h" />
+    <ClInclude Include="MFH264LiveSource.h" />
     <ClInclude Include="MFMSAACEncoder.h" />
     <ClInclude Include="MFMSH264Encoder.h" />
     <ClInclude Include="MFMuxAsync.h" />

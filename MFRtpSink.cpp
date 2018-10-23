@@ -1,12 +1,17 @@
 #include "MFRtpSink.h"
 #include "UsageEnvironment.hh"
 #include "BasicUsageEnvironment.hh"
+#include "Groupsock.hh"
+#include "liveMedia.hh"
+#include "MFH264LiveSource.h"
 
 
 MFRtpSink::MFRtpSink(MFPipeline* pipeline) :
 	MFFilter(pipeline),
 	videoFramesCount(0)
 {
+	_started = FALSE;
+	Initiated = TRUE;
 }
 
 
@@ -32,8 +37,17 @@ HRESULT MFRtpSink::Start()
 void MFRtpSink::ThreadProc()
 {
 	TaskScheduler* scheduler = BasicTaskScheduler::createNew();
+	UsageEnvironment* env = BasicUsageEnvironment::createNew(*scheduler);
 
-	while (!StopFlag)
+	in_addr dstAddr = { 127, 0, 0, 1 };
+	Groupsock rtpGroupsock(*env, dstAddr, 1233, 255);
+	rtpGroupsock.addDestination(dstAddr, 1234, 0);
+	RTPSink * rtpSink = H264VideoRTPSink::createNew(*env, &rtpGroupsock, 96);
+
+	MFH264LiveSource *mfH264Source = MFH264LiveSource::createNew(*env);
+	rtpSink->startPlaying(*mfH264Source, NULL, NULL);
+
+	/*while (!StopFlag)
 	{
 		if (!Pipeline->videoEncBuffer->empty())
 		{
@@ -48,7 +62,11 @@ void MFRtpSink::ThreadProc()
 		}
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-	}
+	}*/
+
+	// This function call does not return.
+	env->taskScheduler().doEventLoop();
+
 	TraceD(L"RtpSink end of thread");
 }
 
