@@ -519,14 +519,14 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 				_pipeline.mux->AddAudioStream(_pipeline.audenc->OutputMediaType);
 			}
 
-			_silenceGenerator.Start();
+			/*_silenceGenerator.Start();
 
 			LoopbackCaptureStart(&_pipeline);
 
 			while (_pipeline.audioCapBuffer->empty() || _pipeline.lastAudioTS < 500 * 10000)
 			{
 				Sleep(1);
-			}
+			}*/
 #endif
 
 			if (!_pipeline.videnc->IsStarted())
@@ -543,7 +543,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 			if (!_pipeline.mux->IsStarted())
 			{
-				_pipeline.mux->Start();
+				//_pipeline.mux->Start();
 			}
 
 			if (!_pipeline.rtpsink->IsStarted())
@@ -621,7 +621,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	{
 		_pipeline.mux->Stop();
 
-		while (!_pipeline.mux->Finished)
+		/*while (!_pipeline.mux->Finished)
 		{
 			Sleep(10);
 		}
@@ -629,20 +629,20 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 		if (_pipeline.mux->ShutdownAndSaveFile() != S_OK)
 		{
 			printLn("Unable to save output file.");
-		}
+		}*/
 	}
 
 	if (_pipeline.rtpsink)
 	{
 		_pipeline.rtpsink->Stop();
 
-		while (!_pipeline.mux->Finished)
+	/*	while (!_pipeline.mux->Finished)
 		{
 			Sleep(10);
-		}
+		}*/
 
 	}
-	Sleep(2000);
+	//Sleep(10000);
 
 	if (msg.message == WM_QUIT)
 	{
